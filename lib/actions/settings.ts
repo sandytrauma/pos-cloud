@@ -7,23 +7,40 @@ import { revalidatePath } from "next/cache";
 
 export async function updateStoreSettings(formData: FormData) {
   const storeName = formData.get("storeName") as string;
-  const gstin = formData.get("gstin") as string;
-  const phone = formData.get("phone") as string;
-  const userId = formData.get("userId") as string;
+  // Convert the string ID from the form into a Number
+  const userId = Number(formData.get("userId")); 
+
+  if (isNaN(userId)) {
+    return { success: false, error: "Invalid User ID" };
+  }
 
   try {
-    // Assuming you store settings per user/admin for now
     await db.update(users)
       .set({ 
-        // If your users table has these fields, update them here
-        // If you have a separate 'settings' table, update that instead
         name: storeName, 
       })
-      .where(eq(users.id, userId));
+      .where(eq(users.id, userId)); // Now it's number vs number ✅
 
     revalidatePath("/dashboard/settings");
     return { success: true };
   } catch (error) {
+    console.error(error);
     return { success: false, error: "Failed to update settings" };
+  }
+}
+
+// Do the same for your toggle function
+export async function toggleMaintenanceMode(userId: string | number, isClosed: boolean) {
+  try {
+    await db.update(users)
+      .set({ 
+        // update your status column here
+      })
+      .where(eq(users.id, Number(userId))); // Convert to number ✅
+
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (error) {
+    return { success: false };
   }
 }
