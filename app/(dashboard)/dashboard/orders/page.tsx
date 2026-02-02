@@ -5,6 +5,9 @@ import ReprintButton from "@/components/orders/ReprintButton";
 import { cn, formatINR } from "@/lib/utils";
 import { Search } from "lucide-react";
 
+export const dynamic = "force-dynamic"; // Add this line
+export const revalidate = 0;           // Optional: ensures zero cachin
+
 export default async function OrdersPage({
   searchParams,
 }: {
