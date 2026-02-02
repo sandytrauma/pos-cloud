@@ -9,13 +9,17 @@ import {
   ReceiptIndianRupee, 
   Settings, 
   LogOut,
-  CookingPot
+  CookingPot,
+  ClipboardList, // New icon for Menu
+  Box            // New icon for Inventory
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Live Orders", href: "/dashboard/orders", icon: Utensils },
+  { name: "Digital Menu", href: "/dashboard/menu", icon: ClipboardList }, // Added Menu
+  { name: "Inventory", href: "/dashboard/inventory", icon: Box },         // Added Inventory
   { name: "Revenue & GST", href: "/dashboard/revenue", icon: ReceiptIndianRupee },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];

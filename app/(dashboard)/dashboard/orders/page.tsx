@@ -3,26 +3,28 @@ import { orders } from "@/db/schema";
 import { desc, ilike, or } from "drizzle-orm";
 import ReprintButton from "@/components/orders/ReprintButton";
 import { cn, formatINR } from "@/lib/utils";
-import { Search } from "lucide-react";
+import OrderSearch from "@/components/orders/OrderSearch";
 
 export const dynamic = "force-dynamic"; // Add this line
 export const revalidate = 0;           // Optional: ensures zero cachin
 
-export default async function OrdersPage({
-  searchParams,
-}: {
-  searchParams: { query?: string };
+export default async function OrdersPage(props: {
+  searchParams: Promise<{ query?: string }>; // In 2026, this MUST be a Promise
 }) {
-  const query = searchParams?.query || "";
+  // FIX: Await the searchParams
+  const searchParams = await props.searchParams;
+  const query = searchParams.query || "";
 
   const data = await db
     .select()
     .from(orders)
     .where(
-      or(
-        ilike(orders.customerPhone, `%${query}%`),
-        ilike(orders.tokenNumber, `%${query}%`)
-      )
+      query 
+        ? or(
+            ilike(orders.customerPhone, `%${query}%`),
+            ilike(orders.tokenNumber, `%${query}%`)
+          )
+        : undefined
     )
     .orderBy(desc(orders.createdAt));
 
@@ -35,19 +37,17 @@ export default async function OrdersPage({
         </div>
         
         {/* Search Bar */}
-        <form className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-amber-500 transition-colors" size={18} />
-          <input
-            name="query"
-            placeholder="Search phone or token..."
-            defaultValue={query}
-            className="w-full md:w-80 bg-slate-900 border border-slate-800 rounded-2xl pl-10 pr-4 py-3 text-sm focus:border-amber-500 outline-none transition-all"
-          />
-        </form>
+       <OrderSearch defaultValue={query} />
       </header>
 
-      <div className="grid gap-3">
-        {data.map((order) => (
+      <div className="grid gap-3" key={query}>
+
+        {data.length === 0 ? (
+          <div className="py-20 text-center bg-slate-900/50 rounded-3xl border border-dashed border-slate-800">
+            <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">No orders found</p>
+          </div>
+        ) : (
+        data.map((order) => (
           <div 
             key={order.id} 
             className="group bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between hover:bg-slate-800/50 transition-all"
@@ -78,7 +78,7 @@ export default async function OrdersPage({
               <ReprintButton order={order} />
             </div>
           </div>
-        ))}
+        )))}
       </div>
     </div>
   );

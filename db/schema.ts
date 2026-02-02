@@ -54,3 +54,28 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
     references: [orders.id],
   }),
 }));
+
+export const inventory = pgTable('inventory', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  currentStock: decimal('current_stock', { precision: 12, scale: 2 }).default('0.00'),
+  unit: text('unit').notNull(), // 'kg', 'ltr', 'pcs', 'packets'
+  minStockLevel: decimal('min_stock_level', { precision: 12, scale: 2 }).default('5.00'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// 6. Stock Logs (The Digital Register)
+export const stockLogs = pgTable('stock_logs', {
+  id: serial('id').primaryKey(),
+  inventoryId: integer('inventory_id').references(() => inventory.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(), // 'IN' (Purchase) or 'OUT' (Usage/Wastage)
+  quantity: decimal('quantity', { precision: 12, scale: 2 }).notNull(),
+  staffName: text('staff_name'), // Who made the entry
+  reason: text('reason'), // e.g., 'Daily Usage', 'New Supply', 'Spoilage'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Relations
+export const inventoryRelations = relations(inventory, ({ many }) => ({
+  logs: many(stockLogs),
+}));
