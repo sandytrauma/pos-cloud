@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, decimal, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, decimal, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // Enums for strict type safety
@@ -78,4 +78,35 @@ export const stockLogs = pgTable('stock_logs', {
 // Relations
 export const inventoryRelations = relations(inventory, ({ many }) => ({
   logs: many(stockLogs),
+}));
+
+
+
+export const categories = pgTable("categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  order: integer("order").default(0), // For sorting categories
+});
+
+export const menuItems = pgTable("menu_items", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").references(() => categories.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  isAvailable: boolean("is_available").default(true),
+  image: text("image"), // URL for the dish photo
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const categoriesRelations = relations(categories, ({ many }) => ({
+  items: many(menuItems),
+}));
+
+// 2. Define relations for MenuItems
+export const menuItemsRelations = relations(menuItems, ({ one }) => ({
+  category: one(categories, {
+    fields: [menuItems.categoryId],
+    references: [categories.id],
+  }),
 }));

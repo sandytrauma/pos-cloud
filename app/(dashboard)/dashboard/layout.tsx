@@ -2,16 +2,20 @@ import SideNav from "@/components/shared/SideNav";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen flex-col md:flex-row md:overflow-hidden bg-slate-950">
-      {/* Sidebar - Fixed on desktop, bottom bar on mobile */}
-      <div className="w-full flex-none md:w-64">
+    <div className="flex h-screen flex-col md:flex-row bg-slate-950 overflow-hidden">
+      {/* Desktop: Sidebar stays on the left (w-64 or w-72)
+          Mobile: Bottom Bar (Navigation is fixed at bottom)
+      */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 w-full md:relative md:w-64 md:flex-none">
         <SideNav />
       </div>
       
       {/* Main Content Area */}
-      <div className="flex-grow p-6 md:overflow-y-auto md:p-10">
-        {children}
-      </div>
+      <main className="flex-grow overflow-y-auto p-6 pb-24 md:p-10 md:pb-10">
+        <div className="mx-auto max-w-7xl">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }
