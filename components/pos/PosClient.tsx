@@ -122,7 +122,7 @@ export default function PosClient({ initialMenu }: { initialMenu: any[] }) {
       </div>
 
       {/* MOBILE FLOATING CART BUTTON (Only visible on small screens) */}
-      <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] z-50">
+      <div className="lg:hidden fixed bottom-22 left-1/2 -translate-x-1/2 w-[90%] z-50">
         <button
           onClick={() => setIsCartOpen(true)}
           className="w-full bg-amber-500 text-slate-950 font-black py-4 rounded-2xl flex items-center justify-between px-6 shadow-2xl shadow-amber-500/40 animate-bounce-subtle"
