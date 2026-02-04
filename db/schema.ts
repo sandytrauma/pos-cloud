@@ -20,8 +20,9 @@ export const orders = pgTable('orders', {
   id: serial('id').primaryKey(),
   tokenNumber: text('token_number').notNull(), 
   source: orderSourceEnum('source').default('POS'),
-  status: orderStatusEnum('status').default('RECEIVED'),
-  
+status: text("status", { 
+    enum: ["RECEIVED", "PREPARING", "READY", "COMPLETED", "CANCELLED", "archived"] 
+  }).default("RECEIVED").notNull(),  
   // Financials in INR (Decimal for precision)
   totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
   gstAmount: decimal('gst_amount', { precision: 12, scale: 2 }).notNull(),

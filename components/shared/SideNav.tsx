@@ -23,7 +23,7 @@ export default function SideNav() {
   return (
     <div className="flex h-20 w-full flex-row items-center border-t border-slate-800 bg-slate-950 px-2 md:h-full md:w-64 md:flex-col md:border-t-0 md:border-r md:px-4 md:py-8">
       
-      {/* Brand Logo - Hidden on mobile to save space */}
+      {/* Brand Logo - Desktop Only */}
       <div className="hidden md:flex mb-10 w-full items-center justify-center rounded-2xl bg-amber-600 p-4 shadow-lg shadow-amber-600/20">
         <div className="text-white font-black flex items-center gap-2 text-xl tracking-tighter italic">
           <CookingPot size={24} /> 
@@ -42,31 +42,44 @@ export default function SideNav() {
               key={link.name}
               href={link.href}
               className={cn(
-                "flex flex-col md:flex-row h-14 md:h-12 grow items-center justify-center gap-1 md:gap-4 rounded-xl px-2 transition-all active:scale-95 md:w-full md:justify-start md:px-4",
+                "flex flex-col md:flex-row h-14 md:h-12 grow items-center justify-center gap-1 md:gap-4 rounded-xl px-1 md:px-4 transition-all active:scale-95 md:w-full md:justify-start",
                 isActive 
                   ? "bg-amber-500/10 text-amber-500 md:bg-amber-500 md:text-slate-950" 
                   : "text-slate-500 hover:text-amber-500 md:hover:bg-slate-900"
               )}
             >
-              <LinkIcon className="w-6 h-6 md:w-5 md:h-5" />
-              <p className="text-[10px] md:text-sm font-black uppercase tracking-tighter md:tracking-normal">
+              <LinkIcon className="w-5 h-5 md:w-5 md:h-5" />
+              <p className="text-[9px] md:text-sm font-black uppercase tracking-tighter md:tracking-normal">
                 {link.name}
               </p>
             </Link>
           );
         })}
 
-        {/* Settings - Mobile Only inside the dock */}
-        <Link
-          href="/dashboard/settings"
-          className={cn(
-            "flex flex-col md:hidden h-14 grow items-center justify-center gap-1 text-slate-500",
-            pathname === "/dashboard/settings" && "text-amber-500"
-          )}
-        >
-          <Settings className="w-6 h-6" />
-          <p className="text-[10px] font-black uppercase">Settings</p>
-        </Link>
+        {/* Mobile Action Group: Settings & Logout */}
+        <div className="flex flex-row md:hidden grow justify-around">
+          <Link
+            href="/dashboard/settings"
+            className={cn(
+              "flex flex-col h-14 grow items-center justify-center gap-1 transition-all active:scale-95",
+              pathname === "/dashboard/settings" ? "text-amber-500" : "text-slate-500"
+            )}
+          >
+            <Settings className="w-5 h-5" />
+            <p className="text-[9px] font-black uppercase tracking-tighter">Settings</p>
+          </Link>
+
+          {/* NEW: Mobile Logout Button */}
+          <form action={logOut} className="flex grow">
+            <button 
+              type="submit"
+              className="flex flex-col h-14 w-full items-center justify-center gap-1 text-rose-500 active:scale-95 transition-all"
+            >
+              <LogOut className="w-5 h-5" />
+              <p className="text-[9px] font-black uppercase tracking-tighter">Exit</p>
+            </button>
+          </form>
+        </div>
       </nav>
 
       {/* Bottom Actions - Desktop Only */}
