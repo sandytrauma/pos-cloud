@@ -11,6 +11,8 @@ export const users = pgTable('users', {
   name: text('name'),
   email: text('email').notNull().unique(),
   password: text('password').notNull(), // Hashed bcrypt password
+  adminPin: text("admin_pin"), // Store a hashed 6-digit PIN
+  twoFactorEnabled: boolean("two_factor_enabled").default(true),
   role: text('role').default('staff'), // 'admin' or 'staff'
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

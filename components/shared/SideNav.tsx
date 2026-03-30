@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logOut } from "@/lib/actions/auth";
+import SetupPinModal from "@/components/auth/SetupPinModal";
 import { 
   LayoutDashboard, Utensils, ReceiptIndianRupee, 
   Settings, LogOut, CookingPot, ClipboardList, Box 
@@ -56,12 +57,12 @@ export default function SideNav() {
           );
         })}
 
-        {/* Mobile Action Group: Settings & Logout */}
-        <div className="flex flex-row md:hidden grow justify-around">
+        {/* Mobile Action Group */}
+        <div className="flex md:hidden grow items-center justify-around">
           <Link
             href="/dashboard/settings"
             className={cn(
-              "flex flex-col h-14 grow items-center justify-center gap-1 transition-all active:scale-95",
+              "flex flex-col h-14 items-center justify-center gap-1 transition-all active:scale-95 px-2",
               pathname === "/dashboard/settings" ? "text-amber-500" : "text-slate-500"
             )}
           >
@@ -69,11 +70,15 @@ export default function SideNav() {
             <p className="text-[9px] font-black uppercase tracking-tighter">Settings</p>
           </Link>
 
-          {/* NEW: Mobile Logout Button */}
-          <form action={logOut} className="flex grow">
+          {/* Setup PIN - Mobile View */}
+          <div className="flex h-14 items-center justify-center">
+             <SetupPinModal />
+          </div>
+
+          <form action={logOut} className="flex items-center justify-center">
             <button 
               type="submit"
-              className="flex flex-col h-14 w-full items-center justify-center gap-1 text-rose-500 active:scale-95 transition-all"
+              className="flex flex-col h-14 items-center justify-center gap-1 text-rose-500 active:scale-95 transition-all px-2"
             >
               <LogOut className="w-5 h-5" />
               <p className="text-[9px] font-black uppercase tracking-tighter">Exit</p>
@@ -83,7 +88,13 @@ export default function SideNav() {
       </nav>
 
       {/* Bottom Actions - Desktop Only */}
-      <div className="hidden md:flex mt-auto w-full flex-col gap-2">
+      <div className="hidden md:flex mt-auto w-full flex-col gap-2 pt-4 border-t border-slate-900">
+        
+        {/* Render PIN Modal outside of any other interactive elements */}
+        <div className="w-full">
+           <SetupPinModal />
+        </div>
+
         <Link
           href="/dashboard/settings"
           className={cn(
@@ -96,7 +107,10 @@ export default function SideNav() {
         </Link>
         
         <form action={logOut}>
-          <button className="flex h-12 w-full items-center gap-4 rounded-xl px-4 text-sm font-bold text-rose-500 hover:bg-rose-500/10 transition-colors">
+          <button 
+            type="submit"
+            className="flex h-12 w-full items-center gap-4 rounded-xl px-4 text-sm font-bold text-rose-500 hover:bg-rose-500/10 transition-colors"
+          >
             <LogOut size={20} />
             <span>Sign Out</span>
           </button>
