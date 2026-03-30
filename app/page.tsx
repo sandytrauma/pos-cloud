@@ -26,7 +26,7 @@ export default async function Home() {
           <div className="bg-amber-500 p-1.5 rounded-lg text-slate-950">
             <CookingPot size={24} />
           </div>
-          <span>KITCHEN<span className="text-amber-500">CLOUD</span></span>
+          <span>Ethereal-KITCHEN<span className="text-amber-500">CLOUD</span></span>
         </div>
         <div className="hidden md:flex gap-8 text-xs font-black uppercase tracking-[0.2em] text-slate-500">
             <a href="#concept" className="hover:text-amber-500 transition-colors">Concept</a>
@@ -157,7 +157,7 @@ export default async function Home() {
             <div className="space-y-6">
                 <div className="flex items-center gap-2 font-bold text-3xl tracking-tighter">
                     <CookingPot className="text-amber-500" size={32} />
-                    <span>KITCHEN<span className="text-amber-500">CLOUD</span></span>
+                    <span>Ethereal-KITCHEN<span className="text-amber-500">CLOUD</span></span>
                 </div>
                 <p className="text-slate-500 max-w-sm">The digital heart of modern food delivery. Gourmet taste, cloud kitchen efficiency.</p>
             </div>
@@ -179,7 +179,7 @@ export default async function Home() {
             </div>
         </div>
         <div className="mt-20 pt-8 border-t border-slate-900 text-center text-slate-600 text-[10px] uppercase tracking-widest">
-            © 2026 KitchenCloud Technologies Private Limited.
+            © 2026 Ethereal-KitchenCloud a unit of Ethereal Inn Hospitality LLP.
         </div>
       </footer>
     </div>
