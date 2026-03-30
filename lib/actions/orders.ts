@@ -75,15 +75,25 @@ export async function updateOrderStatus(
 ) {
   try {
     await db.update(orders)
-      .set({ status })
+      .set({ 
+        status,
+        // Track exactly when the status changed for kitchen analytics
+        updatedAt: new Date() 
+      })
       .where(eq(orders.id, orderId));
 
+    // Refresh all relevant views
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/orders");
+    
+    // CRITICAL: This ensures your Revenue updates immediately 
+    // when an order is marked 'COMPLETED'
+    revalidatePath("/dashboard/reconciliation");
+
     return { success: true };
   } catch (error) {
     console.error("Update Status Error:", error);
-    return { success: false };
+    return { success: false, error: "Failed to update order status" };
   }
 }
 
@@ -108,5 +118,22 @@ export async function archiveOldOrders() {
   } catch (error) {
     console.error("Archive Error:", error);
     return { success: false };
+  }
+}
+
+export async function completeOrderAction(orderId: number) {
+  try {
+    await db.update(orders)
+      .set({ 
+        status: "COMPLETED",
+        updatedAt: new Date() 
+      })
+      .where(eq(orders.id, orderId));
+
+    revalidatePath("/dashboard/orders");
+    revalidatePath("/dashboard/reconciliation"); // Critical for live updates
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Failed to finalize order" };
   }
 }

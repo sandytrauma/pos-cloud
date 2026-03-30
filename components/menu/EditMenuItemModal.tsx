@@ -8,16 +8,18 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from "@/components/ui/dialog";
-import { Pencil, Save, Trash2, AlertCircle } from "lucide-react";
-import { updateMenuItem, deleteMenuItem } from "@/lib/actions/menu"; // Added deleteMenuItem
+import { Pencil, Save, Trash2, IndianRupee, Wallet } from "lucide-react";
+import { updateMenuItem, deleteMenuItem } from "@/lib/actions/menu";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+// Updated Interface to include costPrice
 interface MenuItem {
   id: number;
   name: string;
   price: string | number;
-  categoryId: number | null; // Add | null here
+  costPrice?: string | number | null; // Added this
+  categoryId: number | null;
   description?: string | null;
 }
 
@@ -40,7 +42,6 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
   }
 
   async function handleDelete() {
-    // Simple confirmation for touchscreens
     const confirmed = confirm(`Are you sure you want to delete "${item.name}"?`);
     if (!confirmed) return;
 
@@ -64,16 +65,17 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
         </button>
       </DialogTrigger>
       
-      <DialogContent className="bg-slate-900 border-slate-800 text-white rounded-[2.5rem] w-[95%] max-w-md p-8">
+      <DialogContent className="bg-slate-900 border-slate-800 text-white rounded-[2.5rem] w-[95%] max-w-md p-8 shadow-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">
             Manage <span className="text-amber-500">Dish</span>
           </DialogTitle>
         </DialogHeader>
 
-        <form action={handleUpdate} className="space-y-6 pt-4">
+        <form action={handleUpdate} className="space-y-5 pt-4">
           <input type="hidden" name="id" value={item.id} />
           
+          {/* Dish Name */}
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Dish Name</label>
             <input 
@@ -85,17 +87,39 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Price (₹)</label>
-            <input 
-              name="price"
-              type="number"
-              defaultValue={item.price}
-              required
-              className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-5 text-amber-500 text-2xl font-black italic focus:border-amber-500 outline-none transition-all"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            {/* Selling Price */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1">
+                <IndianRupee size={10} /> Selling Price
+              </label>
+              <input 
+                name="price"
+                type="number"
+                step="0.01"
+                defaultValue={item.price}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-5 text-amber-500 text-xl font-black italic focus:border-amber-500 outline-none transition-all"
+              />
+            </div>
+
+            {/* Cost Price (The New Input) */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                <Wallet size={10} /> Base Cost
+              </label>
+              <input 
+                name="costPrice"
+                type="number"
+                step="0.01"
+                defaultValue={item.costPrice || ""}
+                placeholder="0.00"
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-5 text-slate-300 text-xl font-black italic focus:border-emerald-500 outline-none transition-all"
+              />
+            </div>
           </div>
 
+          {/* Action Buttons */}
           <div className="flex flex-col gap-3 pt-4">
             <button
               type="submit"

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, decimal, pgEnum, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, decimal, pgEnum, boolean, numeric } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // Enums for strict type safety
@@ -63,7 +63,9 @@ export const inventory = pgTable('inventory', {
   name: text('name').notNull(),
   currentStock: decimal('current_stock', { precision: 12, scale: 2 }).default('0.00'),
   unit: text('unit').notNull(), // 'kg', 'ltr', 'pcs', 'packets'
+  unitPrice: numeric("unit_price").default("0"),
   minStockLevel: decimal('min_stock_level', { precision: 12, scale: 2 }).default('5.00'),
+  expiryDate: timestamp("expiry_date"),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
@@ -97,6 +99,7 @@ export const menuItems = pgTable("menu_items", {
   name: text("name").notNull(),
   description: text("description"),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  costPrice: numeric("cost_price"),
   isAvailable: boolean("is_available").default(true),
   image: text("image"), // URL for the dish photo
   createdAt: timestamp("created_at").defaultNow(),
@@ -113,3 +116,20 @@ export const menuItemsRelations = relations(menuItems, ({ one }) => ({
     references: [categories.id],
   }),
 }));
+
+
+export const reconciliations = pgTable('reconciliations', {
+  id: serial('id').primaryKey(),
+  date: timestamp('date').defaultNow().notNull(),
+  totalRevenue: numeric("total_revenue").default("0"),
+  inventoryExpense: numeric("inventory_expense").default("0"),
+  staffExpenses: numeric("staff_expenses").default("0"),
+  miscExpenses: numeric("misc_expenses").default("0"),
+  netEarning: numeric("net_earning").default("0"),
+  orderCount: integer("order_count").default(0),
+  status: text("status").default("closed"), // 'closed' means the day is finalized
+  staffName: text("staff_name"), // Who closed the day
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export type Reconciliation = typeof reconciliations.$inferSelect;

@@ -6,7 +6,8 @@ import { logOut } from "@/lib/actions/auth";
 import SetupPinModal from "@/components/auth/SetupPinModal";
 import { 
   LayoutDashboard, Utensils, ReceiptIndianRupee, 
-  Settings, LogOut, CookingPot, ClipboardList, Box 
+  Settings, LogOut, CookingPot, ClipboardList, Box, 
+  Receipt
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,8 @@ const links = [
   { name: "Menu", href: "/dashboard/menu", icon: ClipboardList },
   { name: "Inventory", href: "/dashboard/inventory", icon: Box },
   { name: "Revenue", href: "/dashboard/revenue", icon: ReceiptIndianRupee },
+    { name: "Daily_Billing", href: "/dashboard/billing", icon: Receipt },
+
 ];
 
 export default function SideNav() {

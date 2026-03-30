@@ -15,33 +15,30 @@ export default async function OrdersPage(props: {
   const searchParams = await props.searchParams;
   const query = searchParams.query || "";
   
-  // Parse Dates from SearchParams
   const fromDate = searchParams.from ? new Date(searchParams.from) : undefined;
   const toDate = searchParams.to ? new Date(searchParams.to) : undefined;
 
-  // If a 'to' date exists, set it to the very end of that day (23:59:59)
   if (toDate) {
     toDate.setHours(23, 59, 59, 999);
   }
 
-  const data = await db
-    .select()
-    .from(orders)
-    .where(
-      and(
-        // Filter by Phone or Token
-        query 
-          ? or(
-              ilike(orders.customerPhone, `%${query}%`),
-              ilike(orders.tokenNumber, `%${query}%`)
-            )
-          : undefined,
-        // Filter by Date Range
-        fromDate ? gte(orders.createdAt, fromDate) : undefined,
-        toDate ? lte(orders.createdAt, toDate) : undefined
-      )
-    )
-    .orderBy(desc(orders.createdAt));
+  // UPDATED: Switching to Relational Query API to include 'items'
+  const data = await db.query.orders.findMany({
+    where: and(
+      query 
+        ? or(
+            ilike(orders.customerPhone, `%${query}%`),
+            ilike(orders.tokenNumber, `%${query}%`)
+          )
+        : undefined,
+      fromDate ? gte(orders.createdAt, fromDate) : undefined,
+      toDate ? lte(orders.createdAt, toDate) : undefined
+    ),
+    with: {
+      items: true, // This is the magic line that fixes the reprint button
+    },
+    orderBy: [desc(orders.createdAt)],
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -58,7 +55,6 @@ export default async function OrdersPage(props: {
           </div>
         </div>
         
-        {/* Pass params to the Client Search Component */}
         <OrderSearch 
           defaultValue={query} 
           from={searchParams.from} 
@@ -95,7 +91,6 @@ export default async function OrdersPage(props: {
                 key={order.id} 
                 className="group bg-slate-900 border border-slate-800/60 p-5 rounded-[2.5rem] flex items-center justify-between hover:bg-slate-800/30 hover:border-amber-500/40 transition-all shadow-xl active:scale-[0.98]"
               >
-                {/* Left: Identity & Source */}
                 <div className="flex items-center gap-6">
                   <div className="h-16 w-16 rounded-[1.5rem] bg-slate-950 flex flex-col items-center justify-center border border-slate-800 group-hover:border-amber-500/20 transition-colors shrink-0">
                     <span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter mb-0.5">Source</span>
@@ -109,13 +104,9 @@ export default async function OrdersPage(props: {
                       <span className="font-black text-white text-2xl tracking-tighter italic leading-none">
                         {order.tokenNumber}
                       </span>
-                      <span className={cn(
-                        "text-[9px] px-2.5 py-1 rounded-full font-black uppercase tracking-widest border",
-                        order.source === 'ZOMATO' 
-                          ? "bg-rose-500/10 text-rose-500 border-rose-500/20" 
-                          : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                      )}>
-                        {order.source}
+                      {/* NEW: Item Count Badge for visibility */}
+                      <span className="text-[9px] text-slate-400 font-bold bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700">
+                        {order.items?.length || 0} Items
                       </span>
                     </div>
                     <div className="flex items-center gap-4 text-slate-500 text-[10px] font-black uppercase tracking-[0.15em]">
@@ -125,7 +116,6 @@ export default async function OrdersPage(props: {
                   </div>
                 </div>
 
-                {/* Right: Price, Status & Reprint */}
                 <div className="flex items-center gap-10">
                   <div className="text-right hidden sm:block shrink-0">
                     <p className="text-white font-black text-xl tracking-tighter mb-0.5">{formatINR(Number(order.totalAmount))}</p>
@@ -138,6 +128,7 @@ export default async function OrdersPage(props: {
                   </div>
                   
                   <div className="bg-slate-950 p-2 rounded-2xl border border-slate-800 group-hover:border-amber-500/40 transition-all">
+                    {/* Pass the fully hydrated order (with items) to the button */}
                     <ReprintButton order={order} />
                   </div>
                 </div>
