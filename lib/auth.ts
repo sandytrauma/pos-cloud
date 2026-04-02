@@ -12,6 +12,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: "/login",
   },
+  callbacks: {
+    async jwt({ token, user }) {
+      // 'user' is only passed the first time a user logs in
+      if (user) {
+        token.id = user.id;
+        token.role = user.role; // Capture role from the authorize return
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (token && session.user) {
+        session.user.id = token.id as string;
+        session.user.role = token.role as string; // Inject role into session
+      }
+      return session;
+    },
+  },
   providers: [
     Credentials({
       async authorize(credentials) {
@@ -31,21 +48,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!isPasswordCorrect) return null;
 
+        // RETURN THE OBJECT FOR THE JWT CALLBACK
         return {
           id: user.id.toString(),
           email: user.email,
           name: user.name,
+          role: user.role, // This passes 'admin' or 'staff'
         };
       },
     }),
   ],
- callbacks: {
-  async jwt({ token, user }) {
-    if (user) {
-      token.id = user.id; // NextAuth users usually have string IDs
-    }
-    return token;
-  },
- 
-},
 });

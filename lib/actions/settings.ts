@@ -7,38 +7,36 @@ import { revalidatePath } from "next/cache";
 
 export async function updateStoreSettings(formData: FormData) {
   const storeName = formData.get("storeName") as string;
-  // Convert the string ID from the form into a Number
-  const userId = Number(formData.get("userId")); 
+  const userId = Number(formData.get("userId"));
 
-  if (isNaN(userId)) {
-    return { success: false, error: "Invalid User ID" };
-  }
+  if (isNaN(userId)) return { success: false, error: "Invalid User" };
 
   try {
     await db.update(users)
-      .set({ 
-        name: storeName, 
-      })
-      .where(eq(users.id, userId)); // Now it's number vs number ✅
+      .set({ name: storeName })
+      .where(eq(users.id, userId));
 
     revalidatePath("/dashboard/settings");
     return { success: true };
   } catch (error) {
-    console.error(error);
-    return { success: false, error: "Failed to update settings" };
+    return { success: false, error: "Database error" };
   }
 }
 
-// Do the same for your toggle function
 export async function toggleMaintenanceMode(userId: string | number, isClosed: boolean) {
+  const uid = Number(userId);
+  if (isNaN(uid)) return { success: false };
+
   try {
     await db.update(users)
       .set({ 
-        // update your status column here
+        // Logic: Using role as a status flag to avoid schema changes
+        role: isClosed ? "maintenance" : "admin" 
       })
-      .where(eq(users.id, Number(userId))); // Convert to number ✅
+      .where(eq(users.id, uid));
 
     revalidatePath("/", "layout");
+    revalidatePath("/dashboard", "layout");
     return { success: true };
   } catch (error) {
     return { success: false };

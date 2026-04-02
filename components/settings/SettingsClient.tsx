@@ -1,86 +1,117 @@
 "use client";
 
-import { useState } from "react";
-import { Store, Percent, Printer, ShieldCheck, BellRing } from "lucide-react";
-import { updateStoreSettings } from "@/lib/actions/settings";
-import { toast } from "sonner"; // Optional: for notifications
+import { useState, useTransition } from "react";
+import { Store, Percent, ShieldAlert, Save, Loader2, Power } from "lucide-react";
+import { updateStoreSettings, toggleMaintenanceMode } from "@/lib/actions/settings";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
-export default function SettingsClient({ userId }: { userId: string }) {
+export default function SettingsClient({ user }: { user: any }) {
   const [activeTab, setActiveTab] = useState("profile");
+  const [isPending, startTransition] = useTransition();
+  
+  // Logic: If role is 'maintenance', store is closed
+  const isClosed = user.role === "maintenance";
 
   const tabs = [
     { id: "profile", label: "Store Profile", icon: <Store size={18}/> },
-    { id: "tax", label: "Tax & GST", icon: <Percent size={18}/> },
-    { id: "hardware", label: "Printers", icon: <Printer size={18}/> },
+    { id: "ops", label: "Operations", icon: <ShieldAlert size={18}/> },
   ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-      {/* Tab Navigation */}
+      {/* Sidebar */}
       <div className="space-y-2">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+            className={cn(
+              "w-full flex items-center gap-3 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all",
               activeTab === tab.id 
-                ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/10" 
+                ? "bg-amber-500 text-slate-950 shadow-xl shadow-amber-500/20" 
                 : "text-slate-500 hover:bg-slate-900 hover:text-amber-500"
-            }`}
+            )}
           >
             {tab.icon} {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Dynamic Content Area */}
-      <div className="md:col-span-2">
-        <form action={async (formData) => {
-          const res = await updateStoreSettings(formData);
-          if (res.success) toast.success("Settings Saved!");
-        }}>
-          <input type="hidden" name="userId" value={userId} />
+      {/* Content Area */}
+      <div className="md:col-span-2 space-y-6">
+        {activeTab === "profile" && (
+          <form action={async (formData) => {
+            startTransition(async () => {
+              const res = await updateStoreSettings(formData);
+              if (res.success) toast.success("Store Profile Updated");
+            });
+          }}>
+            <input type="hidden" name="userId" value={user.id} />
+            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl space-y-6">
+              <h2 className="text-amber-500 font-black uppercase tracking-widest text-[10px] mb-4">Branding</h2>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Store Name</label>
+                <input 
+                  name="storeName" 
+                  defaultValue={user.name || ""} 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:ring-2 focus:ring-amber-500/50 outline-none font-bold" 
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={isPending}
+                className="w-full flex items-center justify-center gap-3 bg-amber-500 text-slate-950 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-amber-400 transition-all"
+              >
+                {isPending ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                Save Changes
+              </button>
+            </div>
+          </form>
+        )}
 
-          {activeTab === "profile" && (
-            <section className="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
-              <h2 className="text-amber-500 font-black uppercase tracking-widest text-sm mb-6 flex items-center gap-2">
-                <Store size={18} /> Store Information
+        {activeTab === "ops" && (
+          <div className="space-y-6 animate-in fade-in">
+            <section className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl">
+              <h2 className="text-rose-500 font-black uppercase tracking-widest text-[10px] mb-6 flex items-center gap-2">
+                <Power size={16} /> Danger Zone
               </h2>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Kitchen Name</label>
-                  <input name="storeName" type="text" defaultValue="Kitchen Cloud" className="settings-input" />
+              
+              <div className={cn(
+                "p-6 rounded-3xl border flex justify-between items-center transition-all",
+                isClosed ? "bg-rose-500/10 border-rose-500/30" : "bg-slate-950 border-slate-800"
+              )}>
+                <div>
+                  <p className="text-white font-black italic uppercase text-lg tracking-tighter">
+                    {isClosed ? "Maintenance Mode Active" : "Kitchen is Live"}
+                  </p>
+                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">
+                    {isClosed ? "POS and ordering are locked." : "Accepting orders normally."}
+                  </p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase">GSTIN</label>
-                    <input name="gstin" type="text" defaultValue="09ABCDE..." className="settings-input font-mono text-amber-500" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Phone</label>
-                    <input name="phone" type="text" defaultValue="+91..." className="settings-input" />
-                  </div>
-                </div>
+
+                <button
+                  onClick={() => {
+                    startTransition(async () => {
+                      const res = await toggleMaintenanceMode(user.id, !isClosed);
+                      if (res.success) toast.info(isClosed ? "Store Opened" : "Store Closed for Maintenance");
+                    });
+                  }}
+                  disabled={isPending}
+                  className={cn(
+                    "w-16 h-8 rounded-full flex items-center px-1 transition-all",
+                    isClosed ? "bg-rose-500" : "bg-emerald-500"
+                  )}
+                >
+                  <div className={cn(
+                    "w-6 h-6 bg-white rounded-full shadow-lg transition-transform duration-300",
+                    isClosed ? "translate-x-0" : "translate-x-8"
+                  )} />
+                </button>
               </div>
             </section>
-          )}
-
-          {activeTab === "tax" && (
-            <section className="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl animate-in fade-in">
-              <h2 className="text-amber-500 font-black uppercase tracking-widest text-sm mb-6 flex items-center gap-2">
-                <Percent size={18} /> Taxation Rules
-              </h2>
-              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex justify-between items-center">
-                <span className="text-white font-bold">Standard 5% GST</span>
-                <div className="w-12 h-6 bg-amber-500 rounded-full flex items-center px-1"><div className="w-4 h-4 bg-slate-950 rounded-full ml-auto"/></div>
-              </div>
-            </section>
-          )}
-
-          <div className="flex justify-end mt-8">
-            <button type="submit" className="amber-button">Save Configuration</button>
           </div>
-        </form>
+        )}
       </div>
     </div>
   );
