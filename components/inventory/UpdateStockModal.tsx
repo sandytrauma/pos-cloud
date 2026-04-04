@@ -1,14 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { PlusCircle, MinusCircle, User, AlertCircle, ArrowRightLeft } from "lucide-react";
-import { updateStockAction } from "@/lib/actions/inventory";
+import { PlusCircle, MinusCircle, User, AlertCircle, ArrowRightLeft, Download, Loader2 } from "lucide-react";
+import { updateStockAction, getInventoryReportData } from "@/lib/actions/inventory";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-export default function UpdateStockModal({ item, setOpen }: { item: any, setOpen: any }) {
+interface UpdateStockModalProps {
+  item: any;
+  setOpen: (open: boolean) => void;
+}
+
+export default function UpdateStockModal({ item, setOpen }: UpdateStockModalProps) {
   const [type, setType] = useState<'IN' | 'OUT'>('OUT');
   const [loading, setLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
 
   if (!item) {
     return (
@@ -19,6 +25,32 @@ export default function UpdateStockModal({ item, setOpen }: { item: any, setOpen
     );
   }
 
+  // --- REPORT DOWNLOAD LOGIC ---
+  async function handleDownloadReport() {
+    setReportLoading(true);
+    try {
+      const res = await getInventoryReportData();
+      if (res.success && res.data) {
+        const blob = new Blob([res.data], { type: "text/csv" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Inventory_Report_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success("Inventory report downloaded");
+      } else {
+        toast.error(res.error || "Failed to generate report");
+      }
+    } catch (error) {
+      toast.error("Download error occurred");
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
+  // --- STOCK UPDATE LOGIC ---
   async function handleSubmit(formData: FormData) {
     setLoading(true);
     const res = await updateStockAction(item.id, type, formData);
@@ -33,16 +65,29 @@ export default function UpdateStockModal({ item, setOpen }: { item: any, setOpen
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 p-8 rounded-[2.5rem] shadow-2xl mx-4">
-      <div className="text-center mb-8">
-        <div className="w-12 h-12 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-center mx-auto mb-4">
+    <div className="bg-slate-900 border border-slate-800 p-8 rounded-[2.5rem] shadow-2xl mx-4 max-w-md w-full relative overflow-hidden">
+      {/* Decorative Header */}
+      <div className="flex justify-between items-center mb-8 relative z-10">
+        <div className="w-12 h-12 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-center">
           <ArrowRightLeft className="text-amber-500" size={20} />
         </div>
+        
+        <button
+          onClick={handleDownloadReport}
+          disabled={reportLoading}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-400 hover:text-amber-500 transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+        >
+          {reportLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+          Export CSV
+        </button>
+      </div>
+
+      <div className="text-center mb-8">
         <h3 className="text-white font-black text-2xl uppercase tracking-tighter italic leading-none">
           {item.name}
         </h3>
-        <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-2">
-          Manual Ledger Adjustment
+        <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-2 italic">
+          Current Balance: <span className="text-amber-500">{item.currentStock} {item.unit}</span>
         </p>
       </div>
       
@@ -80,7 +125,7 @@ export default function UpdateStockModal({ item, setOpen }: { item: any, setOpen
 
         {/* Quantity Input */}
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-slate-500 uppercase ml-2">
+          <label className="text-[10px] font-black text-slate-500 uppercase ml-2 tracking-widest">
             Adjustment Amount ({item.unit})
           </label>
           <div className="relative">
@@ -90,37 +135,40 @@ export default function UpdateStockModal({ item, setOpen }: { item: any, setOpen
               step="0.01"
               required
               autoFocus
-              className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-5 text-white font-black text-2xl outline-none focus:border-amber-500 transition-all placeholder:text-slate-800 italic"
+              className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-5 text-white font-black text-3xl outline-none focus:border-amber-500 transition-all placeholder:text-slate-900 italic"
               placeholder="0.00"
             />
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-700 font-black text-xs uppercase">
-              {item.unit}
-            </div>
           </div>
         </div>
 
         {/* Accountability Field */}
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-slate-500 uppercase ml-2 flex items-center gap-1">
+          <label className="text-[10px] font-black text-slate-500 uppercase ml-2 flex items-center gap-1 tracking-widest">
             <User size={10} /> Authorized By
           </label>
           <input 
             name="staffName"
             type="text" 
             required
-            className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-white text-sm font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-800"
+            className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-white text-sm font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-900"
             placeholder="Staff Name"
           />
         </div>
 
         <button 
           disabled={loading}
+          type="submit"
           className={cn(
             "w-full font-black py-5 rounded-2xl uppercase tracking-tighter italic transition-all active:scale-95 shadow-xl disabled:opacity-50 mt-2",
-            type === 'IN' ? "bg-emerald-500 text-slate-950" : "bg-rose-500 text-white"
+            type === 'IN' ? "bg-emerald-500 text-slate-950" : "bg-rose-500 text-white shadow-rose-500/20"
           )}
         >
-          {loading ? "Syncing Ledger..." : `Confirm Stock ${type}`}
+          {loading ? (
+            <div className="flex items-center justify-center gap-2">
+              <Loader2 className="animate-spin" size={18} />
+              <span>Updating Ledger...</span>
+            </div>
+          ) : `Confirm Stock ${type}`}
         </button>
       </form>
     </div>
