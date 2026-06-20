@@ -8,36 +8,55 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from "@/components/ui/dialog";
-import { Pencil, Save, Trash2, IndianRupee, Wallet } from "lucide-react";
-import { updateMenuItem, deleteMenuItem } from "@/lib/actions/menu";
+import { Pencil, Save, Trash2, IndianRupee, DollarSign, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Updated Interface to include costPrice
+// Explicit structural alignment module schema interface
 interface MenuItem {
   id: number;
   name: string;
   price: string | number;
-  costPrice?: string | number | null; // Added this
+  costPrice?: string | number | null; 
   categoryId: number | null;
   description?: string | null;
 }
 
-export default function EditMenuItemModal({ item }: { item: MenuItem }) {
+interface EditMenuItemModalProps {
+  /** The item configuration payload bound from the target loop state */
+  item: MenuItem;
+  /** Injected server action callback to handle multi-tenant record alterations */
+  updateMenuItem: (formData: FormData) => Promise<{ success: boolean; error?: string }>;
+  /** Injected server action callback to safely remove menu listing records from database */
+  deleteMenuItem: (id: number) => Promise<{ success: boolean; error?: string }>;
+  /** Optional currency selector layout variation (Defaults to 'INR') */
+  currencyLocale?: "INR" | "USD" | "EUR" | "GBP";
+}
+
+export default function EditMenuItemModal({ 
+  item,
+  updateMenuItem,
+  deleteMenuItem,
+  currencyLocale = "INR"
+}: EditMenuItemModalProps) {
   const [open, setOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   async function handleUpdate(formData: FormData) {
     setIsPending(true);
-    const res = await updateMenuItem(formData);
-    setIsPending(false);
-    
-    if (res.success) {
-      toast.success(`${item.name} updated successfully`);
-      setOpen(false);
-    } else {
-      toast.error("Failed to update item");
+    try {
+      const res = await updateMenuItem(formData);
+      if (res.success) {
+        toast.success(`${formData.get("name") || item.name} updated successfully`);
+        setOpen(false);
+      } else {
+        toast.error(res.error || "Failed to update item");
+      }
+    } catch (error) {
+      toast.error("Failed to parse system catalog changes safely.");
+    } finally {
+      setIsPending(false);
     }
   }
 
@@ -46,16 +65,28 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
     if (!confirmed) return;
 
     setIsDeleting(true);
-    const res = await deleteMenuItem(item.id);
-    setIsDeleting(false);
-
-    if (res.success) {
-      toast.error(`${item.name} removed from menu`);
-      setOpen(false);
-    } else {
-      toast.error("Failed to delete item");
+    try {
+      const res = await deleteMenuItem(item.id);
+      if (res.success) {
+        toast.error(`${item.name} removed from menu`);
+        setOpen(false);
+      } else {
+        toast.error(res.error || "Failed to delete item");
+      }
+    } catch (error) {
+      toast.error("Failed to safely access core data destruction streams.");
+    } finally {
+      setIsDeleting(false);
     }
   }
+
+  // Handle cross-border currency icon rendering
+  const renderCurrencyIcon = () => {
+    switch (currencyLocale) {
+      case "USD": return <DollarSign size={10} />;
+      default: return <IndianRupee size={10} />;
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -65,14 +96,17 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
         </button>
       </DialogTrigger>
       
-      <DialogContent className="bg-slate-900 border-slate-800 text-white rounded-[2.5rem] w-[95%] max-w-md p-8 shadow-2xl">
-        <DialogHeader>
+      <DialogContent className="bg-slate-900 border-slate-800 text-white rounded-[2.5rem] w-[95%] max-w-md p-8 shadow-2xl relative overflow-hidden">
+        {/* Accent background mask style */}
+        <div className="absolute -top-24 -left-24 w-48 h-48 bg-amber-500/5 rounded-full blur-[80px]" />
+
+        <DialogHeader className="relative z-10">
           <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">
             Manage <span className="text-amber-500">Dish</span>
           </DialogTitle>
         </DialogHeader>
 
-        <form action={handleUpdate} className="space-y-5 pt-4">
+        <form action={handleUpdate} className="space-y-5 pt-4 relative z-10">
           <input type="hidden" name="id" value={item.id} />
           
           {/* Dish Name */}
@@ -83,7 +117,7 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
               type="text"
               defaultValue={item.name}
               required
-              className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-5 text-white font-bold focus:border-amber-500 outline-none transition-all"
+              className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-5 text-white font-bold focus:border-amber-500 outline-none transition-all placeholder:text-slate-800"
             />
           </div>
 
@@ -91,7 +125,7 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
             {/* Selling Price */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1">
-                <IndianRupee size={10} /> Selling Price
+                {renderCurrencyIcon()} Selling Price
               </label>
               <input 
                 name="price"
@@ -103,7 +137,7 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
               />
             </div>
 
-            {/* Cost Price (The New Input) */}
+            {/* Cost Price */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
                 <Wallet size={10} /> Base Cost
@@ -114,7 +148,7 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
                 step="0.01"
                 defaultValue={item.costPrice || ""}
                 placeholder="0.00"
-                className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-5 text-slate-300 text-xl font-black italic focus:border-emerald-500 outline-none transition-all"
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-5 text-slate-300 text-xl font-black italic focus:border-emerald-500 outline-none transition-all placeholder:text-slate-900"
               />
             </div>
           </div>
@@ -137,7 +171,7 @@ export default function EditMenuItemModal({ item }: { item: MenuItem }) {
               type="button"
               onClick={handleDelete}
               disabled={isPending || isDeleting}
-              className="w-full py-4 rounded-2xl font-black uppercase tracking-tighter text-[10px] text-rose-500/50 hover:text-rose-500 flex items-center justify-center gap-2 transition-colors border border-transparent hover:border-rose-500/20"
+              className="w-full py-4 rounded-2xl font-black uppercase tracking-tighter text-[10px] text-rose-500/50 hover:text-rose-500 flex items-center justify-center gap-2 transition-colors border border-transparent hover:border-rose-500/20 disabled:opacity-50"
             >
               {isDeleting ? <div className="w-4 h-4 border-2 border-rose-500/20 border-t-rose-500 rounded-full animate-spin" /> : <Trash2 size={14} />}
               Remove from Menu

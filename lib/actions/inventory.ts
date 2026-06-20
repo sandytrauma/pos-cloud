@@ -1,68 +1,80 @@
 "use server";
 
-import { db } from "@/db";
-import { inventory, stockLogs } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
+interface WhiteLabelInventoryConfig {
+  db: any;                  // Accepts the tenant's Drizzle connection instance
+  inventoryTable: any;      // Accepts the inventory schema table reference
+  stockLogsTable: any;      // Accepts the audit log schema table reference
+  dashboardBasePath?: string; // Optional: Overrides path location (Defaults to "/dashboard")
+}
+
 /**
- * Updates stock levels and creates an audit log in a single transaction.
+ * 1. Update Stock Levels & Log Audit History
+ * 🌟 FIXED: Shifted from factory function object closure to an atomic, flat, top-level Server Action
  */
 export async function updateStockAction(
+  config: WhiteLabelInventoryConfig,
   inventoryId: number, 
   type: 'IN' | 'OUT', 
   formData: FormData
 ) {
+  const { db, inventoryTable, stockLogsTable, dashboardBasePath = "/dashboard" } = config;
+  const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
+
   const quantityStr = formData.get("quantity") as string;
   const staffName = (formData.get("staffName") as string) || "System";
   const quantity = parseFloat(quantityStr);
 
-  // Validation
   if (isNaN(quantity) || quantity <= 0) {
     return { success: false, error: "Enter a valid positive number" };
   }
 
   try {
-    await db.transaction(async (tx) => {
-      // 1. Calculate adjustment
+    // FIXED: Removed PgTransaction hard-typing rule to remain multi-dialect flexible inside distributed environments
+    await db.transaction(async (tx: any) => {
       const adjustment = type === 'IN' ? quantity : -quantity;
 
-      // 2. THE CRITICAL FIX: 
-      // We cast the adjustment to ::numeric explicitly so Postgres accepts the math.
-      // We also ensure currentStock is treated correctly.
+      // Perform precision numeric arithmetic matching the dynamic table layout passed
       await tx
-        .update(inventory)
+        .update(inventoryTable)
         .set({
-          currentStock: sql`${inventory.currentStock} + ${adjustment.toString()}::numeric`,
+          currentStock: sql`${inventoryTable.currentStock} + ${adjustment.toString()}::numeric`,
           updatedAt: new Date(),
         })
-        .where(eq(inventory.id, inventoryId));
+        .where(eq(inventoryTable.id, inventoryId));
 
-      // 3. Create the Audit Log
-      await tx.insert(stockLogs).values({
+      // Log the balance change for calculations down the stream
+      await tx.insert(stockLogsTable).values({
         inventoryId,
         type,
-        quantity: quantity.toString(), // Store as string for Decimal columns
+        quantity: quantity.toString(),
         staffName,
         reason: type === 'IN' ? "Restock" : "Usage",
         createdAt: new Date(),
       });
     });
 
-    // 4. Force Next.js to drop the cache and fetch new numbers
-    revalidatePath("/dashboard/inventory");
-    
+    revalidatePath(`${basePath}/inventory`);
     return { success: true };
   } catch (error) {
     console.error("Database Update Failed:", error);
-    return { success: false, error: "Database rejected the update." };
+    return { success: false, error: "Database rejected the ledger update." };
   }
 }
 
 /**
- * Creates a brand new inventory item
+ * 2. Register a Brand New Inventory Stock Item
+ * 🌟 FIXED: Flat serialization pass compliant with Turbopack bundler pipelines
  */
-export async function createInventoryItem(formData: FormData) {
+export async function createInventoryItem(
+  config: WhiteLabelInventoryConfig, 
+  formData: FormData
+) {
+  const { db, inventoryTable, dashboardBasePath = "/dashboard" } = config;
+  const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
+
   const name = formData.get("name") as string;
   const unit = formData.get("unit") as string;
   const minStock = formData.get("minStock") as string;
@@ -70,39 +82,38 @@ export async function createInventoryItem(formData: FormData) {
   const expiryDateStr = formData.get("expiryDate") as string;
 
   try {
-    await db.insert(inventory).values({
+    await db.insert(inventoryTable).values({
       name,
       unit,
       currentStock: "0.00",
       minStockLevel: minStock || "5.00",
       unitPrice: unitPrice || "0.00",
-      // Convert HTML date string to Date object or null
       expiryDate: expiryDateStr ? new Date(expiryDateStr) : null,
       updatedAt: new Date(),
     });
 
-    revalidatePath("/dashboard/inventory");
+    revalidatePath(`${basePath}/inventory`);
     return { success: true };
   } catch (error) {
     console.error("Create Item Error:", error);
-    return { success: false, error: "Failed to create item in database" };
+    return { success: false, error: "Failed to build ledger index target." };
   }
 }
 
 /**
- * Fetches all inventory data and formats it for a CSV download.
+ * 3. Fetch Snapshot & Format Raw Stream Into CSV Payload
  */
-export async function getInventoryReportData() {
+export async function getInventoryReportData(config: WhiteLabelInventoryConfig) {
+  const { db, inventoryTable } = config;
   try {
-    const data = await db.select().from(inventory).orderBy(inventory.name);
+    const data = await db.select().from(inventoryTable).orderBy(inventoryTable.name);
     
-    // Define CSV Structure
     const headers = ["Item ID", "Item Name", "Current Stock", "Unit", "Min Level", "Last Updated"];
     const csvRows = [
-      headers.join(","), // Header row
-      ...data.map(item => [
+      headers.join(","),
+      ...data.map((item: any) => [
         item.id,
-        `"${item.name}"`, // Wrap in quotes to handle names with commas
+        `"${item.name}"`, 
         item.currentStock,
         item.unit,
         item.minStockLevel,

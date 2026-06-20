@@ -5,11 +5,20 @@ import {
   Dialog, DialogContent, DialogHeader, 
   DialogTitle, DialogTrigger 
 } from "@/components/ui/dialog";
-import { ShieldCheck, KeyRound, ArrowRight, Lock } from "lucide-react";
-import { verifyCurrentPassword, resetAdminPin } from "@/lib/actions/auth";
+import { ShieldCheck, KeyRound, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-export default function SetupPinModal() {
+interface SetupPinModalProps {
+  /** Injected dynamic server action execution callback to verify current login password */
+  verifyCurrentPassword: (password: string) => Promise<{ success: boolean }>;
+  /** Injected dynamic server action execution callback to save newly built security PIN */
+  resetAdminPin: (password: string, newPin: string) => Promise<{ success: boolean; error?: string }>;
+}
+
+export default function SetupPinModal({ 
+  verifyCurrentPassword, 
+  resetAdminPin 
+}: SetupPinModalProps) {
   const [step, setStep] = useState(1);
   const [password, setPassword] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -18,42 +27,44 @@ export default function SetupPinModal() {
 
   // Handle Step 1: Verify Password before moving to Step 2
   const handleVerifyPassword = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  
-  try {
-    const res = await verifyCurrentPassword(password);
+    e.preventDefault();
+    setLoading(true);
     
-    // Add this log to see what the server sent back
-    console.log("Server Response:", res);
+    try {
+      const res = await verifyCurrentPassword(password);
 
-    if (res && res.success === true) {
-      setStep(2); // This should trigger the UI change to PIN input
-      toast.success("Identity verified.");
-    } else {
-      toast.error("Invalid password. Please try again.");
+      if (res && res.success === true) {
+        setStep(2); 
+        toast.success("Identity verified.");
+      } else {
+        toast.error("Invalid password. Please try again.");
+      }
+    } catch (err) {
+      toast.error("Connection or configuration error.");
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    toast.error("Connection error.");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
   // Handle Step 2: Final PIN Save
   const handleSavePin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPin.length < 4) return toast.error("PIN too short");
+    if (newPin.length < 4) return toast.error("PIN must be at least 4 digits");
     
     setLoading(true);
-    const res = await resetAdminPin(password, newPin);
-    setLoading(false);
-
-    if (res.success) {
-      toast.success("Admin PIN updated!");
-      setOpen(false);
-      resetModal();
-    } else {
-      toast.error(res.error || "Failed to update PIN");
+    try {
+      const res = await resetAdminPin(password, newPin);
+      if (res.success) {
+        toast.success("Admin PIN updated!");
+        setOpen(false);
+        resetModal();
+      } else {
+        toast.error(res.error || "Failed to update PIN");
+      }
+    } catch (error) {
+      toast.error("Failed to commit updates to database context.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -89,7 +100,7 @@ export default function SetupPinModal() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-12 text-white focus:border-amber-500 outline-none transition-all"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-12 text-white focus:border-amber-500 outline-none transition-all placeholder:text-slate-800"
                   placeholder="Account Password"
                 />
                 <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
@@ -105,7 +116,7 @@ export default function SetupPinModal() {
                 autoFocus
                 value={newPin}
                 onChange={(e) => setNewPin(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-5 text-center text-3xl font-black tracking-[0.5em] text-amber-500 focus:border-amber-500 outline-none transition-all"
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-5 text-center text-3xl font-black tracking-[0.5em] text-amber-500 focus:border-amber-500 outline-none transition-all placeholder:text-slate-900"
                 placeholder="******"
               />
             </div>
@@ -114,10 +125,19 @@ export default function SetupPinModal() {
           <button 
             type="submit"
             disabled={loading}
-            className="w-full py-5 bg-amber-500 text-slate-950 rounded-2xl font-black uppercase italic text-lg shadow-xl shadow-amber-500/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+            className="w-full py-5 bg-amber-500 text-slate-950 rounded-2xl font-black uppercase italic text-lg shadow-xl shadow-amber-500/10 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-800 disabled:text-slate-600"
           >
-            {loading ? "Processing..." : step === 1 ? "Verify Identity" : "Save PIN"}
-            {!loading && <ArrowRight size={20} />}
+            {loading ? (
+              <>
+                <Loader2 size={20} className="animate-spin" />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <span>{step === 1 ? "Verify Identity" : "Save PIN"}</span>
+                <ArrowRight size={20} />
+              </>
+            )}
           </button>
         </form>
       </DialogContent>

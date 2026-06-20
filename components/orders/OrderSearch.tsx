@@ -1,40 +1,63 @@
 "use client";
 
+import { Search, Calendar, X } from "lucide-react"; 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Search, Calendar, X } from "lucide-react"; // Added X for a clear button
 import { useDebouncedCallback } from "use-debounce";
 
-// 1. Update the interface to include 'from' and 'to'
 interface OrderSearchProps {
+  /** Initial text query values provided by server side data fetching models */
   defaultValue?: string;
+  /** Initial start calendar execution parameter string */
   from?: string;
+  /** Initial boundary end filter snapshot parameters string */
   to?: string;
+  /** Optional white-label callback override to bypass or extend direct Next.js router hooks */
+  onSearchChange?: (type: 'query' | 'from' | 'to', value: string) => void;
+  /** Optional white-label callback override to clear active client states manually */
+  onClear?: () => void;
 }
 
-export default function OrderSearch({ defaultValue, from, to }: OrderSearchProps) {
-  const { replace } = useRouter();
+export default function OrderSearch({ 
+  defaultValue = "", 
+  from = "", 
+  to = "",
+  onSearchChange,
+  onClear
+}: OrderSearchProps) {
+  // Gracefully fallback to standard navigation engines if custom overrides are omitted
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // Handle parameter mutations safely
   const handleSearch = useDebouncedCallback((term: string, type: 'query' | 'from' | 'to') => {
-    const params = new URLSearchParams(searchParams);
-    
-    if (term) {
-      params.set(type, term);
-    } else {
-      params.delete(type);
+    if (onSearchChange) {
+      onSearchChange(type, term);
+      return;
     }
-    
-    // Reset to first page if you have pagination, or just replace URL
-    replace(`${pathname}?${params.toString()}`);
+
+    // Direct Next.js router fallback execution pipeline
+    if (searchParams) {
+      const params = new URLSearchParams(searchParams.toString());
+      if (term) {
+        params.set(type, term);
+      } else {
+        params.delete(type);
+      }
+      router.replace(`${pathname}?${params.toString()}`);
+    }
   }, 300);
 
   const clearFilters = () => {
-    replace(pathname);
+    if (onClear) {
+      onClear();
+      return;
+    }
+    router.replace(pathname);
   };
 
   return (
-    <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+    <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto relative z-10">
       {/* Text Search */}
       <div className="relative w-full md:w-64">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
@@ -73,8 +96,9 @@ export default function OrderSearch({ defaultValue, from, to }: OrderSearchProps
         {/* Clear Button - helpful for 7" screens to reset quickly */}
         {(defaultValue || from || to) && (
           <button 
+            type="button"
             onClick={clearFilters}
-            className="p-3 bg-slate-800 text-slate-400 rounded-2xl hover:text-white transition-colors"
+            className="p-3 bg-slate-800 text-slate-400 rounded-2xl hover:text-white transition-colors active:scale-90"
             title="Clear all filters"
           >
             <X size={18} />

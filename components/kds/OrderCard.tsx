@@ -1,38 +1,39 @@
 "use client";
 
 import { useState } from "react";
-import { updateOrderStatus } from "@/lib/actions/orders";
 import { cn, formatINR } from "@/lib/utils";
 import { CheckCircle2, Clock, ExternalLink, Loader2, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 
-// Define the literal types allowed by your Drizzle schema
+// Define the literal types allowed by the core architecture
 type OrderStatus = "RECEIVED" | "PREPARING" | "READY" | "COMPLETED" | "CANCELLED" | "archived";
 
 interface OrderProps {
   order: {
     id: number;
     tokenNumber: string;
-    // 1. Add 'null' here to match the database/Drizzle type
     source: "POS" | "ZOMATO" | "SWIGGY" | null; 
     status: OrderStatus;
     totalAmount: string | number;
     items?: { quantity: number; itemName: string }[];
     customerPhone?: string | null;
   };
+  /** Injected server action callback to handle multi-tenant lifecycle states */
+  updateOrderStatus: (orderId: number, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
+  /** Optional function override to navigate or inspect full order records */
+  onViewDetails?: (orderId: number) => void;
 }
 
-export default function OrderCard({ order }: OrderProps) {
+export default function OrderCard({ order, updateOrderStatus, onViewDetails }: OrderProps) {
   const [isPending, setIsPending] = useState(false);
 
   const sourceColors: Record<string, string> = {
     ZOMATO: "border-rose-500 text-rose-500 bg-rose-500/10",
     SWIGGY: "border-orange-500 text-orange-500 bg-orange-500/10",
     POS: "border-emerald-500 text-emerald-500 bg-emerald-500/10",
-    UNKNOWN: "border-slate-500 text-slate-500 bg-slate-500/10", // Fallback
+    UNKNOWN: "border-slate-500 text-slate-500 bg-slate-500/10",
   };
 
-  // 3. Use a safe variable for the display source
   const displaySource = order.source || "UNKNOWN";
 
   const handleStatusUpdate = async (newStatus: OrderStatus) => {
@@ -42,10 +43,10 @@ export default function OrderCard({ order }: OrderProps) {
       if (res.success) {
         toast.success(`Order #${order.tokenNumber} updated to ${newStatus}`);
       } else {
-        toast.error("Failed to update status");
+        toast.error(res.error || "Failed to update status");
       }
     } catch (error) {
-      toast.error("An error occurred");
+      toast.error("An operational error occurred");
     } finally {
       setIsPending(false);
     }
@@ -58,11 +59,11 @@ export default function OrderCard({ order }: OrderProps) {
         <div className="flex items-center gap-3">
           <span className="text-2xl font-black text-white tracking-tighter italic">#{order.tokenNumber}</span>
           <span className={cn(
-      "text-[10px] px-2 py-0.5 rounded-full font-bold border", 
-      sourceColors[displaySource] // This is now safe
-    )}>
-      {displaySource}
-    </span>
+            "text-[10px] px-2 py-0.5 rounded-full font-bold border", 
+            sourceColors[displaySource]
+          )}>
+            {displaySource}
+          </span>
         </div>
         <div className="flex items-center text-slate-500 text-[10px] font-bold gap-1 uppercase">
           <Clock size={12} className="text-amber-500" /> 
@@ -97,8 +98,8 @@ export default function OrderCard({ order }: OrderProps) {
       {/* Action Area */}
       <div className="p-2 bg-slate-950/50 flex gap-2">
         {order.status === "READY" ? (
-          // Final step to ensure Revenue shows up on Reconciliation Page
           <button 
+            type="button"
             disabled={isPending}
             onClick={() => handleStatusUpdate("COMPLETED")}
             className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10px] font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2 uppercase tracking-tighter shadow-lg shadow-emerald-500/10 active:scale-95 disabled:opacity-50"
@@ -108,6 +109,7 @@ export default function OrderCard({ order }: OrderProps) {
           </button>
         ) : (
           <button 
+            type="button"
             disabled={isPending}
             onClick={() => handleStatusUpdate("READY")}
             className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2 uppercase tracking-tighter shadow-lg shadow-amber-500/10 active:scale-95 disabled:opacity-50"
@@ -117,7 +119,12 @@ export default function OrderCard({ order }: OrderProps) {
           </button>
         )}
         
-        <button className="p-3 bg-slate-800 text-slate-400 rounded-xl hover:text-white transition-all active:scale-90">
+        <button 
+          type="button"
+          onClick={() => onViewDetails?.(order.id)}
+          className="p-3 bg-slate-800 text-slate-400 rounded-xl hover:text-white transition-all active:scale-90"
+          aria-label="Inspect order token metadata details"
+        >
           <ExternalLink size={16} />
         </button>
       </div>

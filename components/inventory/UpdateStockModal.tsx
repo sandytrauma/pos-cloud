@@ -2,16 +2,30 @@
 
 import { useState } from "react";
 import { PlusCircle, MinusCircle, User, AlertCircle, ArrowRightLeft, Download, Loader2 } from "lucide-react";
-import { updateStockAction, getInventoryReportData } from "@/lib/actions/inventory";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface UpdateStockModalProps {
+  /** The specific item object being modified */
   item: any;
+  /** React state setter to close the parent dialog wrapper */
   setOpen: (open: boolean) => void;
+  /** Injected server action callback to handle multi-tenant stock adjustments */
+  updateStockAction: (
+    inventoryId: number, 
+    type: 'IN' | 'OUT', 
+    formData: FormData
+  ) => Promise<{ success: boolean; error?: string }>;
+  /** Injected server action callback to handle structural CSV generation */
+  getInventoryReportData: () => Promise<{ success: boolean; data?: string; error?: string }>;
 }
 
-export default function UpdateStockModal({ item, setOpen }: UpdateStockModalProps) {
+export default function UpdateStockModal({ 
+  item, 
+  setOpen,
+  updateStockAction,
+  getInventoryReportData
+}: UpdateStockModalProps) {
   const [type, setType] = useState<'IN' | 'OUT'>('OUT');
   const [loading, setLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
@@ -53,15 +67,20 @@ export default function UpdateStockModal({ item, setOpen }: UpdateStockModalProp
   // --- STOCK UPDATE LOGIC ---
   async function handleSubmit(formData: FormData) {
     setLoading(true);
-    const res = await updateStockAction(item.id, type, formData);
-    
-    if (res.success) {
-      toast.success(`${item.name} updated: ${type === 'IN' ? '+' : '-'}${formData.get('quantity')} ${item.unit}`);
-      if (setOpen) setOpen(false); 
-    } else {
-      toast.error(res.error || "Failed to update stock");
+    try {
+      const res = await updateStockAction(item.id, type, formData);
+      
+      if (res.success) {
+        toast.success(`${item.name} updated: ${type === 'IN' ? '+' : '-'}${formData.get('quantity')} ${item.unit}`);
+        if (setOpen) setOpen(false); 
+      } else {
+        toast.error(res.error || "Failed to update stock");
+      }
+    } catch (error) {
+      toast.error("Failed to sync inventory ledger.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
@@ -73,11 +92,12 @@ export default function UpdateStockModal({ item, setOpen }: UpdateStockModalProp
         </div>
         
         <button
+          type="button"
           onClick={handleDownloadReport}
           disabled={reportLoading}
           className="flex items-center gap-2 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-400 hover:text-amber-500 transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
         >
-          {reportLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+          {reportLoading ? <Loader2 size={14} className="animate-spin text-amber-500" /> : <Download size={14} />}
           Export CSV
         </button>
       </div>
@@ -150,7 +170,7 @@ export default function UpdateStockModal({ item, setOpen }: UpdateStockModalProp
             name="staffName"
             type="text" 
             required
-            className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-white text-sm font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-900"
+            className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-white text-sm font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-800"
             placeholder="Staff Name"
           />
         </div>

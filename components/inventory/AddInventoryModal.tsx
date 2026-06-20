@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Package, Ruler, AlertTriangle, IndianRupee, CalendarClock, Loader2 } from "lucide-react";
-import { createInventoryItem } from "@/lib/actions/inventory";
+import { Plus, Package, Ruler, AlertTriangle, DollarSign, IndianRupee, CalendarClock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { 
   Dialog, 
@@ -12,21 +11,44 @@ import {
   DialogDescription 
 } from "@/components/ui/dialog";
 
-export default function AddInventoryModal() {
+interface AddInventoryModalProps {
+  /** Injected server action callback to handle multi-tenant record registration */
+  createInventoryItem: (formData: FormData) => Promise<{ success: boolean; error?: string }>;
+  /** Optional currency selector layout variation (Defaults to 'INR') */
+  currencyLocale?: "INR" | "USD" | "EUR" | "GBP";
+}
+
+export default function AddInventoryModal({ 
+  createInventoryItem,
+  currencyLocale = "INR" 
+}: AddInventoryModalProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
-    const res = await createInventoryItem(formData);
-    if (res.success) {
-      toast.success("New item added to ledger");
-      setOpen(false);
-    } else {
-      toast.error(res.error || "Failed to create item");
+    try {
+      const res = await createInventoryItem(formData);
+      if (res.success) {
+        toast.success("New item added to ledger");
+        setOpen(false);
+      } else {
+        toast.error(res.error || "Failed to create item");
+      }
+    } catch (error) {
+      toast.error("Failed to connect to the active ledger instance.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
+
+  // Render the matching currency tracking icon dynamically
+  const renderCurrencyIcon = () => {
+    switch (currencyLocale) {
+      case "USD": return <DollarSign size={10} />;
+      default: return <IndianRupee size={10} />;
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -105,7 +127,7 @@ export default function AddInventoryModal() {
               {/* Unit Cost */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-2 flex items-center gap-1 tracking-widest">
-                  <IndianRupee size={10} /> Unit Cost
+                  {renderCurrencyIcon()} Unit Cost
                 </label>
                 <input 
                   name="unitPrice" 
