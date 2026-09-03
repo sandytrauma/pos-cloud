@@ -7,13 +7,44 @@ interface WhiteLabelOrderConfig {
   db: any;
   ordersTable: any;
   orderItemsTable: any;
+  usersTable?: any;
+  customerProfilesTable?: any;
+  customerAnalyticsTable?: any;
   dashboardBasePath?: string;
+}
+
+export interface PosOrderPayload {
+  customerPhone?: string;
+  userId?: number | null;
+  customerName?: string;
+  items: { itemName: string; quantity: number; price: number }[];
+  subtotal: number;
+  discount?: number;
+  gstAmount: number;
+  netAmount: number;
+  loyaltyPointsEarned?: number;
+}
+
+export interface PosReceiptData {
+  tokenNumber: string;
+  date: string;
+  time: string;
+  items: { itemName: string; quantity: number; price: number }[];
+  subtotal: number;
+  discount: number;
+  gstAmount: number;
+  total: number;
+  customerName?: string;
+  loyaltyPointsEarned: number;
 }
 
 export function createOrderActions({
   db,
   ordersTable,
   orderItemsTable,
+  usersTable,
+  customerProfilesTable,
+  customerAnalyticsTable,
   dashboardBasePath = "/dashboard"
 }: WhiteLabelOrderConfig) {
 
@@ -26,7 +57,6 @@ export function createOrderActions({
         .set({ status: 'archived' }) 
         .where(
           and(
-            // 🌟 FIXED: Kept safe native Drizzle operators for date comparison
             lt(ordersTable.createdAt, fortyEightHoursAgo),
             sql`${ordersTable.status} IN ('COMPLETED', 'CANCELLED')`
           )
@@ -39,19 +69,12 @@ export function createOrderActions({
   };
 
   return {
-    createPosOrder: async (formData: {
-      customerPhone?: string;
-      items: { itemName: string; quantity: number; price: number }[];
-      gstAmount: number;
-      netAmount: number;
-    }) => {
+    createPosOrder: async (formData: PosOrderPayload) => {
       try {
-        const total = formData.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const now = new Date();
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // 🌟 FIXED: Swapped raw SQL template condition for native Drizzle 'gte' operator
-        // This forces the PG driver to safely serialize the 'today' Date object instance without breaking.
         const lastOrderResult = await db
           .select({ maxToken: sql<number>`max(cast(substring(${ordersTable.tokenNumber}, 4) as integer))` })
           .from(ordersTable)
@@ -60,31 +83,135 @@ export function createOrderActions({
         const nextTokenInt = (lastOrderResult[0]?.maxToken || 0) + 1;
         const formattedToken = `TK-${nextTokenInt.toString().padStart(3, '0')}`;
 
+        // 1. Resolve or Auto-Provision Customer Account
+        let resolvedUserId: number | null = formData.userId ?? null;
+
+        if (!resolvedUserId && formData.customerPhone && usersTable && customerProfilesTable) {
+          const cleanPhone = formData.customerPhone.trim();
+
+          const existingProfile = await db
+            .select({ userId: customerProfilesTable.userId })
+            .from(customerProfilesTable)
+            .where(eq(customerProfilesTable.phone, cleanPhone))
+            .limit(1);
+
+          if (existingProfile.length > 0 && existingProfile[0]?.userId) {
+            resolvedUserId = existingProfile[0].userId;
+          } else {
+            const defaultName = formData.customerName?.trim() || `Customer ${cleanPhone.slice(-4)}`;
+            
+            const [newUser] = await db
+              .insert(usersTable)
+              .values({
+                name: defaultName,
+                createdAt: now,
+                updatedAt: now,
+              })
+              .returning();
+
+            if (newUser?.id) {
+              resolvedUserId = newUser.id;
+
+              await db.insert(customerProfilesTable).values({
+                userId: resolvedUserId,
+                phone: cleanPhone,
+                customerType: "REGULAR",
+                loyaltyPoints: 0,
+                isLoyal: false,
+                createdAt: now,
+                updatedAt: now,
+              });
+            }
+          }
+        }
+
+        // 2. Create Master Order Record with Resolved Customer Foreign Key
         const [newOrder] = await db.insert(ordersTable).values({
           tokenNumber: formattedToken,
           source: "POS",
-          totalAmount: total.toFixed(2),
+          userId: resolvedUserId,
+          totalAmount: (formData.subtotal || 0).toFixed(2),
           gstAmount: (formData.gstAmount || 0).toFixed(2),
           netAmount: (formData.netAmount || 0).toFixed(2),
-          customerPhone: formData.customerPhone,
+          customerPhone: formData.customerPhone?.trim() || null,
           status: "RECEIVED",
+          createdAt: now,
+          updatedAt: now,
         }).returning();
 
+        // 3. Insert Line Items
         if (formData.items.length > 0) {
           const itemsToInsert = formData.items.map((item) => ({
             orderId: newOrder.id,
             itemName: item.itemName,
             quantity: item.quantity,
-            price: item.price.toFixed(2),
+            price: Number(item.price || 0).toFixed(2),
           }));
           await db.insert(orderItemsTable).values(itemsToInsert);
+        }
+
+        // 4. Update Customer Analytics & Loyalty Rewards
+        if (resolvedUserId && customerAnalyticsTable) {
+          const netSpentStr = (formData.netAmount || 0).toFixed(2);
+
+          await db
+            .insert(customerAnalyticsTable)
+            .values({
+              userId: resolvedUserId,
+              totalVisits: 1,
+              totalSpent: netSpentStr,
+              averageOrderValue: netSpentStr,
+              lastVisit: now,
+              firstVisit: now,
+              updatedAt: now,
+            })
+            .onConflictDoUpdate({
+              target: customerAnalyticsTable.userId,
+              set: {
+                totalVisits: sql`${customerAnalyticsTable.totalVisits} + 1`,
+                totalSpent: sql`${customerAnalyticsTable.totalSpent} + ${netSpentStr}`,
+                lastVisit: now,
+                updatedAt: now,
+              },
+            });
+        }
+
+        if (resolvedUserId && customerProfilesTable && (formData.loyaltyPointsEarned || 0) > 0) {
+          await db
+            .update(customerProfilesTable)
+            .set({
+              loyaltyPoints: sql`${customerProfilesTable.loyaltyPoints} + ${formData.loyaltyPointsEarned}`,
+              updatedAt: now,
+            })
+            .where(eq(customerProfilesTable.userId, resolvedUserId));
         }
 
         await internalArchiveOldOrders();
 
         revalidatePath(`${basePath}`);
         revalidatePath(`${basePath}/orders`);
-        return { success: true, orderId: newOrder.id, token: newOrder.tokenNumber };
+        revalidatePath(`${basePath}/customers`);
+        revalidatePath(`${basePath}/reconciliation`);
+
+        const receipt: PosReceiptData = {
+          tokenNumber: formattedToken,
+          date: now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+          time: now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+          items: formData.items,
+          subtotal: formData.subtotal,
+          discount: formData.discount ?? 0,
+          gstAmount: formData.gstAmount,
+          total: formData.netAmount,
+          customerName: formData.customerName,
+          loyaltyPointsEarned: formData.loyaltyPointsEarned ?? 0,
+        };
+
+        return {
+          success: true,
+          orderId: newOrder.id,
+          token: newOrder.tokenNumber,
+          receipt,
+        };
       } catch (error) {
         console.error("Order Creation Error:", error);
         return { success: false, error: "Failed to create order" };
@@ -102,6 +229,7 @@ export function createOrderActions({
 
         revalidatePath(`${basePath}`);
         revalidatePath(`${basePath}/orders`);
+        revalidatePath(`${basePath}/customers`);
         revalidatePath(`${basePath}/reconciliation`);
         return { success: true };
       } catch (error) {

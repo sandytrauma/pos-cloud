@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { 
   LayoutDashboard, Utensils, Receipt, 
-  Settings, LogOut, CookingPot, ClipboardList, Box 
+  Settings, LogOut, CookingPot, ClipboardList, Box, 
+  PersonStandingIcon
 } from "lucide-react";
 
 interface SideNavProps {
@@ -37,6 +38,7 @@ export default function SideNav({
     { name: "Stock", href: `${basePath}/inventory`, icon: Box }, 
     { name: "Revenue", href: `${basePath}/revenue`, icon: Receipt }, // Clean generic fallback identifier
     { name: "Bills", href: `${basePath}/billing`, icon: Receipt }, 
+    { name: "Customers", href: `${basePath}/customers`, icon: PersonStandingIcon }, 
   ];
 
   return (

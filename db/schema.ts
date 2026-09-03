@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, decimal, pgEnum, boolean, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, decimal, pgEnum, boolean, numeric, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 // Enums for strict type safety
@@ -9,17 +9,19 @@ export const orderStatusEnum = pgEnum('order_status', ['RECEIVED', 'PREPARING', 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: text('name'),
-  email: text('email').notNull().unique(),
-  password: text('password').notNull(), // Hashed bcrypt password
+  email: text('email').unique(),
+  password: text('password'), // Hashed bcrypt password
   adminPin: text("admin_pin"), // Store a hashed 6-digit PIN
   twoFactorEnabled: boolean("two_factor_enabled").default(true),
   role: text('role').default('staff'), // 'admin' or 'staff'
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 // 2. Orders Table (The Core)
 export const orders = pgTable('orders', {
   id: serial('id').primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
   tokenNumber: text('token_number').notNull(), 
   source: orderSourceEnum('source').default('POS'),
 status: text("status", { 
@@ -133,3 +135,81 @@ export const reconciliations = pgTable('reconciliations', {
 });
 
 export type Reconciliation = typeof reconciliations.$inferSelect;
+
+
+
+
+export const customerTypeEnum = pgEnum("customer_type", ["REGULAR", "SUBSCRIBER", "VIP"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["ACTIVE", "EXPIRED", "CANCELLED", "PAUSED"]);
+export const mealTypeEnum = pgEnum("meal_type", ["BREAKFAST", "LUNCH", "DINNER", "SNACKS"]);
+
+// 1. Extend user profile metadata
+export const customerProfiles = pgTable("customer_profiles", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
+  customerType: customerTypeEnum("customer_type").default("REGULAR").notNull(),
+  loyaltyPoints: integer("loyalty_points").default(0).notNull(),
+  isLoyal: boolean("is_loyal").default(false).notNull(),
+  phone: text("phone"),
+  address: text("address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// 2. Base Subscription Packages / Custom Meal Plan Templates
+export const mealPlans = pgTable("meal_plans", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(), // e.g. "Monthly Executive Lunch", "Custom Keto Plan"
+  description: text("description"),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  durationDays: integer("duration_days").default(30).notNull(),
+  mealsPerDay: integer("meals_per_day").default(1).notNull(),
+  isCustom: boolean("is_custom").default(false).notNull(), // true for custom customer plans
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 3. Line items for custom meal composition
+export const mealPlanItems = pgTable("meal_plan_items", {
+  id: serial("id").primaryKey(),
+  mealPlanId: integer("meal_plan_id").references(() => mealPlans.id, { onDelete: "cascade" }).notNull(),
+  mealType: mealTypeEnum("meal_type").notNull(),
+  itemDescription: text("item_description").notNull(), // or link to menu_items.id
+  priceContribution: numeric("price_contribution", { precision: 10, scale: 2 }).default("0"),
+});
+
+// 4. Subscriptions & One-time Payout Logs
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  mealPlanId: integer("meal_plan_id").references(() => mealPlans.id).notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  status: subscriptionStatusEnum("status").default("ACTIVE").notNull(),
+  amountPaid: numeric("amount_paid", { precision: 10, scale: 2 }).notNull(),
+  paymentReference: text("payment_reference"), // Transaction ID / Invoice ID
+  benefitsApplied: boolean("benefits_applied").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+
+
+export const customerAnalytics = pgTable("customer_analytics", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
+  
+  // Aggregate Metrics
+  totalVisits: integer("total_visits").default(0).notNull(),
+  totalSpent: numeric("total_spent", { precision: 12, scale: 2 }).default("0").notNull(),
+  averageOrderValue: numeric("aov", { precision: 10, scale: 2 }).default("0").notNull(),
+  
+  // Timestamps
+  firstVisit: timestamp("first_visit").defaultNow().notNull(),
+  lastVisit: timestamp("last_visit").defaultNow().notNull(),
+  
+  // Behavioral Insights
+  preferredMealType: text("preferred_meal_type"), // "LUNCH", "DINNER"
+  favoriteCategories: jsonb("favorite_categories").$type<string[]>(), // e.g. ["MAINS", "BEVERAGES"]
+  dietaryNotes: text("dietary_notes"), // e.g. "Low Spice, Nut Allergy"
+  
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

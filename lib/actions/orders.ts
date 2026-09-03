@@ -1,33 +1,44 @@
 // Location: lib/actions/orders.ts
-"use server"; // 🌟 Keep this file strictly assigned to Next.js network routes
+"use server";
 
 import { db } from "@/db";
-import { orders, orderItems } from "@/db/schema";
-import { createOrderActions } from "./orderFactory";
+import { 
+  orders, 
+  orderItems, 
+  users, 
+  customerProfiles, 
+  customerAnalytics 
+} from "@/db/schema";
+import { 
+  createOrderActions, 
+  type PosOrderPayload, 
+  type PosReceiptData 
+} from "./orderFactory";
+
+
 
 // 1. Initialize the engine inside an isolated instance
-// 🌟 FIXED: Removed the inline calculation closure parameter to match your flat core factory design pattern
 const actionsInstance = createOrderActions({
   db,
   ordersTable: orders,
   orderItemsTable: orderItems,
-  dashboardBasePath: "/dashboard"
+  usersTable: users,
+  customerProfilesTable: customerProfiles,
+  customerAnalyticsTable: customerAnalytics,
+  dashboardBasePath: "/dashboard",
 });
 
-// 2. 🌟 STATIC NAMED EXPORTS: This guarantees the compiler maps your imports correctly!
-export async function createPosOrder(formData: {
-  customerPhone?: string;
-  items: { itemName: string; quantity: number; price: number }[];
-  gstAmount: number; // 🌟 FIXED: Accepts flat parameters computed safely before the network boundary pass
-  netAmount: number;
-}) {
+// 2. Pure Server Action functions only
+export async function createPosOrder(formData: PosOrderPayload): Promise<{
+  success: boolean;
+  orderId?: number;
+  token?: string;
+  receipt?: PosReceiptData;
+  error?: string;
+}> {
   return actionsInstance.createPosOrder(formData);
 }
 
-/**
- * 🌟 FIXED: Isolated into a pure calculation utility function.
- * This completely removes the non-serializable closure error that was breaking your child UI views!
- */
 export async function calculateGstBreakdown(subtotal: number, rate: number = 5) {
   const gstAmount = (subtotal * rate) / 100;
   const netAmount = subtotal + gstAmount;
@@ -41,7 +52,6 @@ export async function updateOrderStatus(
   return actionsInstance.updateOrderStatus(orderId, status);
 }
 
-// 🌟 FIXED: Safely hooks up the archival cleanup utility mapping 
 export async function completeOrderAction() {
   return actionsInstance.archiveOldOrders();
 }
