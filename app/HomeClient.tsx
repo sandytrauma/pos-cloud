@@ -419,9 +419,7 @@ export default function HomeClient({
             <span className="text-xl font-black tracking-[-0.04em] uppercase italic text-white leading-none">
               {appPrefix} <span className="text-amber-400">{appSuffix}</span>
             </span>
-            <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-slate-400 mt-1">
-              Part of Ethereal Kitchen Cloud
-            </span>
+           
           </div>
         </div>
 
@@ -453,16 +451,14 @@ export default function HomeClient({
             
             {/* Heritage Badge */}
             <div className="inline-flex flex-wrap items-center justify-center gap-2.5 px-5 py-2 rounded-full bg-slate-900/85 border border-white/15 text-[10px] font-bold tracking-[0.25em] uppercase text-slate-200 shadow-xl backdrop-blur-2xl">
-              <span className="flex items-center gap-1.5 text-amber-400">
-                <Cloud size={13} /> {subTagline}
-              </span>
+             
               <span className="text-white/30">•</span>
               <span className="flex items-center gap-1.5 text-slate-300">
                 <Building2 size={13} /> {parentCompany}
               </span>
             </div>
 
-            {/* Kinetic Ticker */}
+        
             <div className="h-6 flex items-center justify-center overflow-hidden">
               <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.38em] text-amber-400 italic transition-all duration-700 transform">
                 ✨ {tickerPhrases[activeTickerIdx]}
