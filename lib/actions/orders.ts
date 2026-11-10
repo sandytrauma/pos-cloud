@@ -1,10 +1,10 @@
-// Location: lib/actions/orders.ts
 "use server";
 
 import { db } from "@/db";
 import { 
   orders, 
   orderItems, 
+  menuItems,
   users, 
   customerProfiles, 
   customerAnalytics 
@@ -15,20 +15,17 @@ import {
   type PosReceiptData 
 } from "./orderFactory";
 
-
-
-// 1. Initialize the engine inside an isolated instance
 const actionsInstance = createOrderActions({
   db,
   ordersTable: orders,
   orderItemsTable: orderItems,
+  menuItemsTable: menuItems,
   usersTable: users,
   customerProfilesTable: customerProfiles,
   customerAnalyticsTable: customerAnalytics,
   dashboardBasePath: "/dashboard",
 });
 
-// 2. Pure Server Action functions only
 export async function createPosOrder(formData: PosOrderPayload): Promise<{
   success: boolean;
   orderId?: number;

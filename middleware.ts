@@ -1,13 +1,21 @@
 // Location: middleware.ts
 import { auth } from "./lib/auth";
 import { NextResponse } from "next/server";
+import { verify2FAToken } from "./lib/security";
 
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
+export default auth(async (req) => {
+  const isLoggedIn = !!req.auth?.user;
+  const userId = req.auth?.user?.id;
   const { nextUrl } = req;
 
-  // 1. Extract 2FA Security Token State
-  const is2FAVerified = req.cookies.get("admin_2fa_verified")?.value === "true";
+  // 1. Verify 2FA state: checks either cryptographically signed token or verified cookie
+  const legacyVerified = req.cookies.get("admin_2fa_verified")?.value === "true";
+  const tokenCookie = req.cookies.get("admin_2fa_token")?.value;
+  
+  let is2FAVerified = legacyVerified;
+  if (!is2FAVerified && tokenCookie && userId) {
+    is2FAVerified = await verify2FAToken(tokenCookie, userId);
+  }
 
   // 2. Define Context Routes
   const isDashboardPage = nextUrl.pathname.startsWith("/dashboard");
@@ -21,13 +29,10 @@ export default auth((req) => {
   }
 
   // --- LOGIC GATE 2: 2FA SECURITY LOCKOUTS ---
-  // Only enforce the redirect to /verify-pin if they are not already heading there.
   if (isLoggedIn && isDashboardPage && !is2FAVerified) {
     return NextResponse.redirect(new URL("/verify-pin", nextUrl));
   }
 
-  // 🌟 FIXED: Allow users to hit the verify page even if the cookie is mid-transit.
-  // We only bounce them away from /verify-pin if we are 100% sure they are verified.
   if (isVerifyPage && is2FAVerified) {
     return NextResponse.redirect(new URL("/dashboard", nextUrl));
   }
@@ -41,7 +46,6 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/dashboard", nextUrl));
   }
 
-  // If logged in but lacks 2FA, prevent them from bouncing back to login pages
   if (isLoggedIn && !is2FAVerified && isAuthPage) {
     return NextResponse.redirect(new URL("/verify-pin", nextUrl));
   }
@@ -50,6 +54,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Fortified matcher array to skip internal compiler threads completely
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico|globals.css|.*\\..*).*)"],
 };

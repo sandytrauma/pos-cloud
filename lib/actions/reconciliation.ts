@@ -2,19 +2,17 @@
 
 import { eq, and, gte, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { assertRole, assertAuthenticated } from "@/lib/security";
 
 interface WhiteLabelReconciliationConfig {
-  db: any;                 // Accepts the tenant's Drizzle context instance
-  ordersTable: any;        // Accepts the orders schema table definition
-  stockLogsTable: any;     // Accepts the stock logs schema table definition
-  inventoryTable: any;     // Accepts the inventory schema table definition
-  reconciliationsTable: any; // Accepts the reconciliations schema table definition
-  dashboardBasePath?: string; // Optional base directory configuration override
+  db: any;
+  ordersTable: any;
+  stockLogsTable: any;
+  inventoryTable: any;
+  reconciliationsTable: any;
+  dashboardBasePath?: string;
 }
 
-/**
- * Generates runtime financial reconciliation actions for white-label distributions.
- */
 export async function createReconciliationActions({
   db,
   ordersTable,
@@ -27,19 +25,15 @@ export async function createReconciliationActions({
   const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
 
   return {
-    /**
-     * 1. Fetch Daily Financial Balance Sheet & Live Billing Rows
-     */
     getDailySummary: async () => {
-      // Generates an explicit localized YYYY-MM-DD midnight timestamp string 
-      // to prevent the PostgreSQL driver from shifting dates incorrectly across timezones.
-      const now = new Date();
-      const offset = now.getTimezoneOffset();
-      const localToday = new Date(now.getTime() - (offset * 60 * 1000));
-      const todayISOString = localToday.toISOString().split('T')[0] + "T00:00:00.000Z";
-
       try {
-        // A. Fetch Revenue Metrics from COMPLETED orders today
+        await assertAuthenticated();
+
+        const now = new Date();
+        const offset = now.getTimezoneOffset();
+        const localToday = new Date(now.getTime() - (offset * 60 * 1000));
+        const todayISOString = localToday.toISOString().split('T')[0] + "T00:00:00.000Z";
+
         const todayOrders = await db.select({
           revenue: sql<string>`sum(${ordersTable.netAmount})`,
           count: sql<number>`count(${ordersTable.id})`
@@ -50,7 +44,6 @@ export async function createReconciliationActions({
           gte(ordersTable.createdAt, sql`${todayISOString}::timestamp`)
         ));
 
-        // B. Fetch the actual item lists to render live order data directly into the Billing view grid
         const detailedOrdersList = await db.select({
           id: ordersTable.id,
           tokenNumber: ordersTable.tokenNumber,
@@ -62,7 +55,6 @@ export async function createReconciliationActions({
         .where(gte(ordersTable.createdAt, sql`${todayISOString}::timestamp`))
         .orderBy(sql`${ordersTable.createdAt} desc`);
 
-        // C. Fetch COGS by joining stock logs directly with inventory items
         const activeLogs = await db
           .select({
             quantity: stockLogsTable.quantity,
@@ -88,15 +80,12 @@ export async function createReconciliationActions({
             ordersList: detailedOrdersList 
           }
         };
-      } catch (error) {
-        console.error("Daily Summary Optimization Error: ", error);
-        return { success: false, error: "Failed to fetch summary computations." };
+      } catch (error: any) {
+        console.error("Daily Summary Error: ", error);
+        return { success: false, error: error.message || "Failed to fetch summary computations." };
       }
     },
 
-    /**
-     * 2. Save and Freeze Daily Reconciliation (End of Shift Ledger)
-     */
     saveReconciliationAction: async (data: {
       revenue: number;
       inventoryExpense: number;
@@ -104,25 +93,30 @@ export async function createReconciliationActions({
       miscExp: number;
       netEarning: number;
       orderCount: number;
-      staffName: string;
+      staffName?: string;
     }) => {
       try {
+        const currentUser = await assertRole(["admin", "manager"]);
+        const closingStaff = currentUser.name || data.staffName || "Staff";
+
         await db.insert(reconciliationsTable).values({
-          totalRevenue: (data.revenue || 0).toString(),
-          inventoryExpense: (data.inventoryExpense || 0).toString(),
-          staffExpenses: (data.staffExp || 0).toString(),
-          miscExpenses: (data.miscExp || 0).toString(),
-          netEarning: (data.netEarning || 0).toString(),
+          totalRevenue: (data.revenue || 0).toFixed(2),
+          inventoryExpense: (data.inventoryExpense || 0).toFixed(2),
+          staffExpenses: (data.staffExp || 0).toFixed(2),
+          miscExpenses: (data.miscExp || 0).toFixed(2),
+          netEarning: (data.netEarning || 0).toFixed(2),
           orderCount: Number(data.orderCount || 0),
-          staffName: data.staffName || "UNKNOWN_STAFF",
-          status: "closed"
+          staffName: closingStaff,
+          status: "closed",
+          createdAt: new Date(),
         });
 
         revalidatePath(`${basePath}/reconciliation`);
+        revalidatePath(`${basePath}/billing`);
         return { success: true };
-      } catch (error) {
+      } catch (error: any) {
         console.error("Save Reconciliation Error: ", error);
-        return { success: false, error: "Failed to save daily ledger securely." };
+        return { success: false, error: error.message || "Failed to save daily ledger." };
       }
     }
   };

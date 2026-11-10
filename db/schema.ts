@@ -1,54 +1,61 @@
-import { pgTable, serial, text, timestamp, integer, decimal, pgEnum, boolean, numeric, jsonb } from "drizzle-orm/pg-core";
+import { 
+  pgTable, serial, text, timestamp, integer, decimal, 
+  pgEnum, boolean, numeric, jsonb, index 
+} from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
-// Enums for strict type safety
 export const orderSourceEnum = pgEnum('order_source', ['POS', 'ZOMATO', 'SWIGGY']);
 export const orderStatusEnum = pgEnum('order_status', ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED']);
+export const customerTypeEnum = pgEnum("customer_type", ["REGULAR", "SUBSCRIBER", "VIP"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["ACTIVE", "EXPIRED", "CANCELLED", "PAUSED"]);
+export const mealTypeEnum = pgEnum("meal_type", ["BREAKFAST", "LUNCH", "DINNER", "SNACKS"]);
 
-// 1. Users Table (for NextAuth)
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: text('name'),
   email: text('email').unique(),
-  password: text('password'), // Hashed bcrypt password
-  adminPin: text("admin_pin"), // Store a hashed 6-digit PIN
+  password: text('password'),
+  adminPin: text("admin_pin"),
   twoFactorEnabled: boolean("two_factor_enabled").default(true),
-  role: text('role').default('staff'), // 'admin' or 'staff'
+  role: text('role').default('staff'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('users_email_idx').on(table.email),
+  index('users_role_idx').on(table.role),
+]);
 
-// 2. Orders Table (The Core)
 export const orders = pgTable('orders', {
   id: serial('id').primaryKey(),
   userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
   tokenNumber: text('token_number').notNull(), 
   source: orderSourceEnum('source').default('POS'),
-status: text("status", { 
+  status: text("status", { 
     enum: ["RECEIVED", "PREPARING", "READY", "COMPLETED", "CANCELLED", "archived"] 
   }).default("RECEIVED").notNull(),  
-  // Financials in INR (Decimal for precision)
   totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
   gstAmount: decimal('gst_amount', { precision: 12, scale: 2 }).notNull(),
   netAmount: decimal('net_amount', { precision: 12, scale: 2 }).notNull(),
-  gstRate: decimal('gst_rate', { precision: 5, scale: 2 }).default('5.00'), // Track the rate used (5% or 18%)
-  
+  gstRate: decimal('gst_rate', { precision: 5, scale: 2 }).default('5.00'),
   customerPhone: text('customer_phone'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('orders_created_at_idx').on(table.createdAt),
+  index('orders_status_idx').on(table.status),
+  index('orders_user_id_idx').on(table.userId),
+]);
 
-// 3. Order Items Table
 export const orderItems = pgTable('order_items', {
   id: serial('id').primaryKey(),
   orderId: integer('order_id').references(() => orders.id, { onDelete: 'cascade' }),
   itemName: text('item_name').notNull(),
   quantity: integer('quantity').notNull(),
-  price: decimal('price', { precision: 12, scale: 2 }).notNull(), // Price per unit
-});
+  price: decimal('price', { precision: 12, scale: 2 }).notNull(),
+}, (table) => [
+  index('order_items_order_id_idx').on(table.orderId),
+]);
 
-// 4. Drizzle Relations (Crucial for the Dashboard)
-// This allows you to fetch an order AND its items in one clean query
 export const ordersRelations = relations(orders, ({ many }) => ({
   items: many(orderItems),
 }));
@@ -64,54 +71,57 @@ export const inventory = pgTable('inventory', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
   currentStock: decimal('current_stock', { precision: 12, scale: 2 }).default('0.00'),
-  unit: text('unit').notNull(), // 'kg', 'ltr', 'pcs', 'packets'
-  unitPrice: numeric("unit_price").default("0"),
+  unit: text('unit').notNull(),
+  unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).default("0.00"),
   minStockLevel: decimal('min_stock_level', { precision: 12, scale: 2 }).default('5.00'),
   expiryDate: timestamp("expiry_date"),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('inventory_name_idx').on(table.name),
+]);
 
-// 6. Stock Logs (The Digital Register)
 export const stockLogs = pgTable('stock_logs', {
   id: serial('id').primaryKey(),
   inventoryId: integer('inventory_id').references(() => inventory.id, { onDelete: 'cascade' }),
-  type: text('type').notNull(), // 'IN' (Purchase) or 'OUT' (Usage/Wastage)
+  type: text('type').notNull(),
   quantity: decimal('quantity', { precision: 12, scale: 2 }).notNull(),
-  staffName: text('staff_name'), // Who made the entry
-  reason: text('reason'), // e.g., 'Daily Usage', 'New Supply', 'Spoilage'
+  staffName: text('staff_name'),
+  reason: text('reason'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('stock_logs_inventory_id_idx').on(table.inventoryId),
+  index('stock_logs_created_at_idx').on(table.createdAt),
+]);
 
-// Relations
 export const inventoryRelations = relations(inventory, ({ many }) => ({
   logs: many(stockLogs),
 }));
 
-
-
 export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  order: integer("order").default(0), // For sorting categories
+  order: integer("order").default(0),
 });
 
 export const menuItems = pgTable("menu_items", {
   id: serial("id").primaryKey(),
-  categoryId: integer("category_id").references(() => categories.id),
+  categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   description: text("description"),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  costPrice: numeric("cost_price"),
+  costPrice: decimal("cost_price", { precision: 10, scale: 2 }).default("0.00"),
   isAvailable: boolean("is_available").default(true),
-  image: text("image"), // URL for the dish photo
+  image: text("image"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index('menu_items_category_id_idx').on(table.categoryId),
+  index('menu_items_name_idx').on(table.name),
+]);
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
   items: many(menuItems),
 }));
 
-// 2. Define relations for MenuItems
 export const menuItemsRelations = relations(menuItems, ({ one }) => ({
   category: one(categories, {
     fields: [menuItems.categoryId],
@@ -119,31 +129,24 @@ export const menuItemsRelations = relations(menuItems, ({ one }) => ({
   }),
 }));
 
-
 export const reconciliations = pgTable('reconciliations', {
   id: serial('id').primaryKey(),
   date: timestamp('date').defaultNow().notNull(),
-  totalRevenue: numeric("total_revenue").default("0"),
-  inventoryExpense: numeric("inventory_expense").default("0"),
-  staffExpenses: numeric("staff_expenses").default("0"),
-  miscExpenses: numeric("misc_expenses").default("0"),
-  netEarning: numeric("net_earning").default("0"),
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0.00"),
+  inventoryExpense: decimal("inventory_expense", { precision: 12, scale: 2 }).default("0.00"),
+  staffExpenses: decimal("staff_expenses", { precision: 12, scale: 2 }).default("0.00"),
+  miscExpenses: decimal("misc_expenses", { precision: 12, scale: 2 }).default("0.00"),
+  netEarning: decimal("net_earning", { precision: 12, scale: 2 }).default("0.00"),
   orderCount: integer("order_count").default(0),
-  status: text("status").default("closed"), // 'closed' means the day is finalized
-  staffName: text("staff_name"), // Who closed the day
+  status: text("status").default("closed"),
+  staffName: text("staff_name"),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('reconciliations_date_idx').on(table.date),
+]);
 
 export type Reconciliation = typeof reconciliations.$inferSelect;
 
-
-
-
-export const customerTypeEnum = pgEnum("customer_type", ["REGULAR", "SUBSCRIBER", "VIP"]);
-export const subscriptionStatusEnum = pgEnum("subscription_status", ["ACTIVE", "EXPIRED", "CANCELLED", "PAUSED"]);
-export const mealTypeEnum = pgEnum("meal_type", ["BREAKFAST", "LUNCH", "DINNER", "SNACKS"]);
-
-// 1. Extend user profile metadata
 export const customerProfiles = pgTable("customer_profiles", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
@@ -154,30 +157,22 @@ export const customerProfiles = pgTable("customer_profiles", {
   address: text("address"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index('customer_profiles_phone_idx').on(table.phone),
+  index('customer_profiles_user_id_idx').on(table.userId),
+]);
 
-// 2. Base Subscription Packages / Custom Meal Plan Templates
 export const mealPlans = pgTable("meal_plans", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(), // e.g. "Monthly Executive Lunch", "Custom Keto Plan"
+  name: text("name").notNull(),
   description: text("description"),
-  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   durationDays: integer("duration_days").default(30).notNull(),
   mealsPerDay: integer("meals_per_day").default(1).notNull(),
-  isCustom: boolean("is_custom").default(false).notNull(), // true for custom customer plans
+  isCustom: boolean("is_custom").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// 3. Line items for custom meal composition
-export const mealPlanItems = pgTable("meal_plan_items", {
-  id: serial("id").primaryKey(),
-  mealPlanId: integer("meal_plan_id").references(() => mealPlans.id, { onDelete: "cascade" }).notNull(),
-  mealType: mealTypeEnum("meal_type").notNull(),
-  itemDescription: text("item_description").notNull(), // or link to menu_items.id
-  priceContribution: numeric("price_contribution", { precision: 10, scale: 2 }).default("0"),
-});
-
-// 4. Subscriptions & One-time Payout Logs
 export const subscriptions = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
@@ -185,31 +180,27 @@ export const subscriptions = pgTable("subscriptions", {
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
   status: subscriptionStatusEnum("status").default("ACTIVE").notNull(),
-  amountPaid: numeric("amount_paid", { precision: 10, scale: 2 }).notNull(),
-  paymentReference: text("payment_reference"), // Transaction ID / Invoice ID
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }).notNull(),
+  paymentReference: text("payment_reference"),
   benefitsApplied: boolean("benefits_applied").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-
+}, (table) => [
+  index('subscriptions_user_id_idx').on(table.userId),
+  index('subscriptions_status_idx').on(table.status),
+]);
 
 export const customerAnalytics = pgTable("customer_analytics", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
-  
-  // Aggregate Metrics
   totalVisits: integer("total_visits").default(0).notNull(),
-  totalSpent: numeric("total_spent", { precision: 12, scale: 2 }).default("0").notNull(),
-  averageOrderValue: numeric("aov", { precision: 10, scale: 2 }).default("0").notNull(),
-  
-  // Timestamps
+  totalSpent: decimal("total_spent", { precision: 12, scale: 2 }).default("0.00").notNull(),
+  averageOrderValue: decimal("aov", { precision: 10, scale: 2 }).default("0.00").notNull(),
   firstVisit: timestamp("first_visit").defaultNow().notNull(),
   lastVisit: timestamp("last_visit").defaultNow().notNull(),
-  
-  // Behavioral Insights
-  preferredMealType: text("preferred_meal_type"), // "LUNCH", "DINNER"
-  favoriteCategories: jsonb("favorite_categories").$type<string[]>(), // e.g. ["MAINS", "BEVERAGES"]
-  dietaryNotes: text("dietary_notes"), // e.g. "Low Spice, Nut Allergy"
-  
+  preferredMealType: text("preferred_meal_type"),
+  favoriteCategories: jsonb("favorite_categories").$type<string[]>(),
+  dietaryNotes: text("dietary_notes"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index('customer_analytics_user_id_idx').on(table.userId),
+]);

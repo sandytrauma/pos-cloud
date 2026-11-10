@@ -67,7 +67,8 @@ export async function getCustomers(searchQuery?: string): Promise<{
       .innerJoin(customerProfiles, eq(users.id, customerProfiles.userId))
       .leftJoin(customerAnalytics, eq(users.id, customerAnalytics.userId))
       .where(baseWhere)
-      .orderBy(desc(sql`COALESCE(${customerAnalytics.totalSpent}, 0)`), desc(users.id));
+      .orderBy(desc(sql`COALESCE(${customerAnalytics.totalSpent}, 0)`), desc(users.id))
+      .limit(50);
 
     // Fetch active subscriptions in batch
     const activeSubs = await db

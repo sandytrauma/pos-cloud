@@ -1,71 +1,69 @@
-// Location: lib/actions/settingsFactory.ts
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { assertRole } from "@/lib/security";
 
 interface WhiteLabelSettingsConfig {
-  db: any;                         // Accepts the tenant's Drizzle context instance
-  usersTable: any;                 // Accepts the users schema table definition
-  dashboardBasePath?: string;      // Optional base directory configuration override
+  db: any;
+  usersTable: any;
+  dashboardBasePath?: string;
 }
 
-/**
- * Generates runtime system settings and control actions for white-label distributions.
- * Synchronous initialization guarantees safe top-level named destructuring.
- */
 export function createSettingsActions({
   db,
   usersTable,
   dashboardBasePath = "/dashboard"
 }: WhiteLabelSettingsConfig) {
 
-  // Clean trailing slash padding to guarantee precise routing keys
   const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
 
   return {
     /**
-     * 1. Update Core Store Profile Settings
+     * 1. Update Core Store Profile Settings (Admin Only)
      */
     updateStoreSettings: async (formData: FormData) => {
-      const storeName = formData.get("storeName") as string;
-      const userId = Number(formData.get("userId"));
-
-      if (isNaN(userId)) return { success: false, error: "Invalid User Identification reference" };
-
       try {
+        const currentUser = await assertRole(["admin"]);
+        const currentUserId = Number(currentUser.id);
+
+        const storeName = (formData.get("storeName") as string)?.trim();
+        if (!storeName) {
+          return { success: false, error: "Store name is required." };
+        }
+
         await db.update(usersTable)
-          .set({ name: storeName })
-          .where(eq(usersTable.id, userId));
+          .set({ name: storeName, updatedAt: new Date() })
+          .where(eq(usersTable.id, currentUserId));
 
         revalidatePath(`${basePath}/settings`);
         return { success: true };
-      } catch (error) {
+      } catch (error: any) {
         console.error("Update Store Settings Error: ", error);
-        return { success: false, error: "Database error occurred while parsing profile variables." };
+        return { success: false, error: error.message || "Unauthorized or database error occurred." };
       }
     },
 
     /**
-     * 2. Toggle Store Operational Status (Maintenance / Closed Lockouts)
+     * 2. Toggle Store Operational Status (Admin Only)
      */
-    toggleMaintenanceMode: async (userId: string | number, isClosed: boolean) => {
-      const uid = Number(userId);
-      if (isNaN(uid)) return { success: false };
-
+    toggleMaintenanceMode: async (_ignoredUserId: string | number, isClosed: boolean) => {
       try {
+        const currentUser = await assertRole(["admin"]);
+        const currentUserId = Number(currentUser.id);
+
         await db.update(usersTable)
           .set({ 
-            role: isClosed ? "maintenance" : "admin" 
+            role: isClosed ? "maintenance" : "admin",
+            updatedAt: new Date()
           })
-          .where(eq(usersTable.id, uid));
+          .where(eq(usersTable.id, currentUserId));
 
-        // Revalidate layout roots securely to trigger system-wide operational updates
         revalidatePath("/", "layout");
         revalidatePath(`${basePath}`, "layout");
         
         return { success: true };
-      } catch (error) {
+      } catch (error: any) {
         console.error("Toggle Maintenance Mode Error: ", error);
-        return { success: false };
+        return { success: false, error: error.message || "Unauthorized: Admin privileges required." };
       }
     }
   };

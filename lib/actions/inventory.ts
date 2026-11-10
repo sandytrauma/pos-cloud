@@ -2,41 +2,37 @@
 
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { assertRole, assertAuthenticated } from "@/lib/security";
 
 interface WhiteLabelInventoryConfig {
-  db: any;                  // Accepts the tenant's Drizzle connection instance
-  inventoryTable: any;      // Accepts the inventory schema table reference
-  stockLogsTable: any;      // Accepts the audit log schema table reference
-  dashboardBasePath?: string; // Optional: Overrides path location (Defaults to "/dashboard")
+  db: any;
+  inventoryTable: any;
+  stockLogsTable: any;
+  dashboardBasePath?: string;
 }
 
-/**
- * 1. Update Stock Levels & Log Audit History
- * 🌟 FIXED: Shifted from factory function object closure to an atomic, flat, top-level Server Action
- */
 export async function updateStockAction(
   config: WhiteLabelInventoryConfig,
   inventoryId: number, 
   type: 'IN' | 'OUT', 
   formData: FormData
 ) {
-  const { db, inventoryTable, stockLogsTable, dashboardBasePath = "/dashboard" } = config;
-  const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
-
-  const quantityStr = formData.get("quantity") as string;
-  const staffName = (formData.get("staffName") as string) || "System";
-  const quantity = parseFloat(quantityStr);
-
-  if (isNaN(quantity) || quantity <= 0) {
-    return { success: false, error: "Enter a valid positive number" };
-  }
-
   try {
-    // FIXED: Removed PgTransaction hard-typing rule to remain multi-dialect flexible inside distributed environments
+    const user = await assertAuthenticated();
+    const { db, inventoryTable, stockLogsTable, dashboardBasePath = "/dashboard" } = config;
+    const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
+
+    const quantityStr = formData.get("quantity") as string;
+    const staffName = (formData.get("staffName") as string) || user.name || "Staff";
+    const quantity = parseFloat(quantityStr);
+
+    if (isNaN(quantity) || quantity <= 0) {
+      return { success: false, error: "Enter a valid positive number" };
+    }
+
     await db.transaction(async (tx: any) => {
       const adjustment = type === 'IN' ? quantity : -quantity;
 
-      // Perform precision numeric arithmetic matching the dynamic table layout passed
       await tx
         .update(inventoryTable)
         .set({
@@ -45,67 +41,67 @@ export async function updateStockAction(
         })
         .where(eq(inventoryTable.id, inventoryId));
 
-      // Log the balance change for calculations down the stream
       await tx.insert(stockLogsTable).values({
         inventoryId,
         type,
-        quantity: quantity.toString(),
+        quantity: quantity.toFixed(2),
         staffName,
-        reason: type === 'IN' ? "Restock" : "Usage",
+        reason: type === 'IN' ? "Restock" : "Manual Usage Adjustment",
         createdAt: new Date(),
       });
     });
 
     revalidatePath(`${basePath}/inventory`);
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Database Update Failed:", error);
-    return { success: false, error: "Database rejected the ledger update." };
+    return { success: false, error: error.message || "Database rejected the ledger update." };
   }
 }
 
-/**
- * 2. Register a Brand New Inventory Stock Item
- * 🌟 FIXED: Flat serialization pass compliant with Turbopack bundler pipelines
- */
 export async function createInventoryItem(
   config: WhiteLabelInventoryConfig, 
   formData: FormData
 ) {
-  const { db, inventoryTable, dashboardBasePath = "/dashboard" } = config;
-  const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
-
-  const name = formData.get("name") as string;
-  const unit = formData.get("unit") as string;
-  const minStock = formData.get("minStock") as string;
-  const unitPrice = formData.get("unitPrice") as string;
-  const expiryDateStr = formData.get("expiryDate") as string;
-
   try {
+    await assertRole(["admin", "manager"]);
+
+    const { db, inventoryTable, dashboardBasePath = "/dashboard" } = config;
+    const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
+
+    const name = (formData.get("name") as string)?.trim();
+    const unit = (formData.get("unit") as string)?.trim();
+    const minStock = parseFloat(formData.get("minStock") as string) || 5.00;
+    const unitPrice = parseFloat(formData.get("unitPrice") as string) || 0.00;
+    const expiryDateStr = formData.get("expiryDate") as string;
+
+    if (!name || !unit) {
+      return { success: false, error: "Name and unit are required fields." };
+    }
+
     await db.insert(inventoryTable).values({
       name,
       unit,
       currentStock: "0.00",
-      minStockLevel: minStock || "5.00",
-      unitPrice: unitPrice || "0.00",
+      minStockLevel: minStock.toFixed(2),
+      unitPrice: unitPrice.toFixed(2),
       expiryDate: expiryDateStr ? new Date(expiryDateStr) : null,
       updatedAt: new Date(),
     });
 
     revalidatePath(`${basePath}/inventory`);
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Create Item Error:", error);
-    return { success: false, error: "Failed to build ledger index target." };
+    return { success: false, error: error.message || "Failed to create inventory item." };
   }
 }
 
-/**
- * 3. Fetch Snapshot & Format Raw Stream Into CSV Payload
- */
 export async function getInventoryReportData(config: WhiteLabelInventoryConfig) {
-  const { db, inventoryTable } = config;
   try {
+    await assertAuthenticated();
+    const { db, inventoryTable } = config;
+
     const data = await db.select().from(inventoryTable).orderBy(inventoryTable.name);
     
     const headers = ["Item ID", "Item Name", "Current Stock", "Unit", "Min Level", "Last Updated"];
@@ -125,8 +121,8 @@ export async function getInventoryReportData(config: WhiteLabelInventoryConfig) 
       success: true, 
       data: csvRows.join("\n") 
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Report Generation Error:", error);
-    return { success: false, error: "Failed to generate report" };
+    return { success: false, error: error.message || "Failed to generate report" };
   }
 }

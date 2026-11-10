@@ -1,4 +1,3 @@
-// Location: app/(dashboard)/dashboard/orders/page.tsx
 import { db } from "@/db";
 import { orders } from "@/db/schema";
 import { desc } from "drizzle-orm";
@@ -6,10 +5,23 @@ import OrdersHistoryViewLayout from "./OrdersHistoryViewLayout";
 
 export const dynamic = "force-dynamic";
 
-export default async function OrdersHistoryPage() {
-  // Fetch dynamic orders including their explicit relational items array mapping cleanly
+interface OrdersHistoryPageProps {
+  searchParams?: Promise<{
+    page?: string;
+    limit?: string;
+  }>;
+}
+
+export default async function OrdersHistoryPage({ searchParams }: OrdersHistoryPageProps) {
+  const resolvedParams = searchParams ? await searchParams : {};
+  const page = Math.max(1, parseInt(resolvedParams.page || "1", 10));
+  const limit = Math.min(100, Math.max(10, parseInt(resolvedParams.limit || "50", 10)));
+  const offset = (page - 1) * limit;
+
   const fetchedOrders = await db.query.orders.findMany({
     orderBy: [desc(orders.createdAt)],
+    limit,
+    offset,
     with: {
       items: true,
     },
@@ -18,7 +30,6 @@ export default async function OrdersHistoryPage() {
     return [];
   });
 
-  // Serialize parameters safely across the server-to-client component bridge boundary
   const serializedOrders = fetchedOrders.map((order) => ({
     id: String(order.id),
     tokenNumber: order.tokenNumber,

@@ -1,3 +1,4 @@
+// Location: lib/utils.ts
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -23,21 +24,15 @@ export function formatINR(amount: number | string) {
 
 /**
  * Calculates a clean backward GST breakdown based on a total bill amount.
- * Optimized for white-label scaling with dynamic rate adjustments.
- * * @param totalAmount - Gross amount paid by the customer
- * @param dynamicGstRate - Percentage value (e.g., pass 5 for 5%, 18 for 18%). Defaults to 5.
  */
 export function calculateGstBreakdown(
   totalAmount: number | string, 
   dynamicGstRate: number | string = 5
 ) {
   const total = typeof totalAmount === "string" ? parseFloat(totalAmount) : totalAmount;
-  
-  // 1. Convert rate into decimal safely (handles string inputs like "5" or "18.00")
   const numericGstPercentage = typeof dynamicGstRate === "string" ? parseFloat(dynamicGstRate) : dynamicGstRate;
-  const gstDecimal = (numericGstPercentage || 5) / 100; // e.g., 5 / 100 = 0.05
+  const gstDecimal = (numericGstPercentage || 5) / 100;
   
-  // 2. Backward Tax Calculations
   const netAmount = total / (1 + gstDecimal);
   const gstAmount = total - netAmount;
   
@@ -45,7 +40,7 @@ export function calculateGstBreakdown(
     appliedRate: `${numericGstPercentage}%`,
     netAmount: netAmount.toFixed(2),
     gstAmount: gstAmount.toFixed(2),
-    cgst: (gstAmount / 2).toFixed(2), // Central GST Split
-    sgst: (gstAmount / 2).toFixed(2), // State GST Split
+    cgst: (gstAmount / 2).toFixed(2),
+    sgst: (gstAmount / 2).toFixed(2),
   };
 }

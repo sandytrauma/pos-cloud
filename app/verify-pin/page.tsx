@@ -1,31 +1,6 @@
-// Location: app/verify-pin/page.tsx
-import { cookies } from "next/headers";
 import { Lock } from "lucide-react";
-import PinInputField from "./PinInputField"; // Import our clean client view form
-
-/**
- * THE ACTION ENGINE (Server Thread Boundary)
- * Natively reads environment parameters securely during build compilation runs.
- */
-async function verifyAdminPinAction(enteredPin: string) {
-  "use server";
-
-  const targetMasterPin = process.env.ADMIN_MASTER_PIN;
-  
-  if (targetMasterPin && enteredPin.trim() === targetMasterPin.trim()) {
-    const cookieStore = await cookies();
-    cookieStore.set("admin_2fa_verified", "true", {
-      httpOnly: true,
-      path: "/",
-      maxAge: 60 * 60 * 12,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-    });
-    return { success: true };
-  }
-
-  return { success: false, error: "Incorrect Security PIN" };
-}
+import PinInputField from "./PinInputField";
+import { verifyAdminPin } from "@/lib/actions/auth";
 
 export default function VerifyPinPage() {
   return (
@@ -42,12 +17,12 @@ export default function VerifyPinPage() {
             Terminal Security
           </h1>
           <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
-            Enter 6-Digit Operational Passkey
+            Enter 4 to 6-Digit Operational Passkey
           </p>
         </div>
 
-        {/* Inject the standalone Client Input Field component smoothly */}
-        <PinInputField verifyAction={verifyAdminPinAction} />
+        {/* Centralized database-verified server action */}
+        <PinInputField verifyAction={verifyAdminPin} />
       </div>
     </div>
   );
