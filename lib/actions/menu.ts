@@ -1,3 +1,4 @@
+// Location: lib/actions/menu.ts
 "use server";
 
 import { eq } from "drizzle-orm";
@@ -5,12 +6,15 @@ import { revalidatePath } from "next/cache";
 import { assertRole } from "@/lib/security";
 
 interface WhiteLabelMenuConfig {
-  db: any;
-  menuItemsTable: any;
-  categoriesTable: any;
-  dashboardBasePath?: string;
+  db: any;                    // Accepts the tenant's Drizzle instance
+  menuItemsTable: any;        // Accepts the menu items table layout from schema
+  categoriesTable: any;       // Accepts the categories table layout from schema
+  dashboardBasePath?: string; // Optional: Override base path (Defaults to "/dashboard")
 }
 
+/**
+ * 1. Add Category Action (Admin / Manager Only)
+ */
 export async function addCategoryAction(config: WhiteLabelMenuConfig, name: string) {
   try {
     await assertRole(["admin", "manager"]);
@@ -30,6 +34,9 @@ export async function addCategoryAction(config: WhiteLabelMenuConfig, name: stri
   }
 }
 
+/**
+ * 2. Add Menu Item Action (Admin / Manager Only)
+ */
 export async function addMenuItemAction(config: WhiteLabelMenuConfig, formData: FormData) {
   try {
     await assertRole(["admin", "manager"]);
@@ -42,6 +49,7 @@ export async function addMenuItemAction(config: WhiteLabelMenuConfig, formData: 
     const costPriceStr = formData.get("costPrice") as string;
     const costPrice = costPriceStr ? parseFloat(costPriceStr) : 0;
     const categoryId = parseInt(formData.get("categoryId") as string, 10);
+    const description = (formData.get("description") as string)?.trim() || null;
 
     if (!name || isNaN(categoryId) || isNaN(price) || price < 0) {
       return { success: false, error: "Valid item name, positive price, and category are required." };
@@ -49,9 +57,11 @@ export async function addMenuItemAction(config: WhiteLabelMenuConfig, formData: 
 
     await db.insert(menuItemsTable).values({
       name,
+      description,
       price: price.toFixed(2),
       costPrice: costPrice.toFixed(2),
       categoryId,
+      isAvailable: true,
       createdAt: new Date(),
     });
     
@@ -65,6 +75,9 @@ export async function addMenuItemAction(config: WhiteLabelMenuConfig, formData: 
   }
 }
 
+/**
+ * 3. Update Menu Item Action (Admin / Manager Only)
+ */
 export async function updateMenuItemAction(config: WhiteLabelMenuConfig, formData: FormData) {
   try {
     await assertRole(["admin", "manager"]);
@@ -77,17 +90,23 @@ export async function updateMenuItemAction(config: WhiteLabelMenuConfig, formDat
     const price = parseFloat(formData.get("price") as string);
     const costPriceStr = formData.get("costPrice") as string;
     const costPrice = costPriceStr ? parseFloat(costPriceStr) : 0;
+    const categoryId = formData.get("categoryId") ? parseInt(formData.get("categoryId") as string, 10) : undefined;
+    const description = (formData.get("description") as string)?.trim() || undefined;
 
     if (isNaN(id) || !name || isNaN(price) || price < 0) {
       return { success: false, error: "Valid item ID, name, and non-negative price are required." };
     }
 
+    const updatePayload: any = {
+      name,
+      price: price.toFixed(2),
+      costPrice: costPrice.toFixed(2),
+    };
+    if (categoryId !== undefined && !isNaN(categoryId)) updatePayload.categoryId = categoryId;
+    if (description !== undefined) updatePayload.description = description;
+
     await db.update(menuItemsTable)
-      .set({
-        name,
-        price: price.toFixed(2),
-        costPrice: costPrice.toFixed(2),
-      })
+      .set(updatePayload)
       .where(eq(menuItemsTable.id, id));
 
     revalidatePath(`${basePath}/menu`);
@@ -100,6 +119,33 @@ export async function updateMenuItemAction(config: WhiteLabelMenuConfig, formDat
   }
 }
 
+/**
+ * 4. Toggle Availability / 86 Item Action (Admin / Manager / Staff)
+ */
+export async function toggleItemAvailabilityAction(config: WhiteLabelMenuConfig, id: number, isAvailable: boolean) {
+  try {
+    await assertRole(["admin", "manager", "staff"]);
+    const { db, menuItemsTable, dashboardBasePath = "/dashboard" } = config;
+    const basePath = dashboardBasePath.endsWith("/") ? dashboardBasePath.slice(0, -1) : dashboardBasePath;
+
+    if (isNaN(id)) return { success: false, error: "Invalid item ID." };
+
+    await db.update(menuItemsTable)
+      .set({ isAvailable })
+      .where(eq(menuItemsTable.id, id));
+
+    revalidatePath(`${basePath}/menu`);
+    revalidatePath(`${basePath}/pos`);
+    return { success: true };
+  } catch (error: any) {
+    console.error("Toggle Availability Error:", error);
+    return { success: false, error: error.message || "Failed to toggle dish availability." };
+  }
+}
+
+/**
+ * 5. Delete Menu Item Action (Admin Only)
+ */
 export async function deleteMenuItemAction(config: WhiteLabelMenuConfig, id: number) {
   try {
     await assertRole(["admin"]);

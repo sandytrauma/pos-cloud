@@ -2,38 +2,53 @@
 import { db } from "@/db";
 import { categories, menuItems } from "@/db/schema";
 import { desc } from "drizzle-orm";
-import { addCategoryAction, addMenuItemAction, updateMenuItemAction } from "@/lib/actions/menu";
+import { 
+  addCategoryAction, 
+  addMenuItemAction, 
+  updateMenuItemAction,
+  toggleItemAvailabilityAction,
+  deleteMenuItemAction
+} from "@/lib/actions/menu";
 import MenuClientViewLayout from "./MenuClientViewLayout";
 
 export const dynamic = "force-dynamic";
 
-// Drizzle config mapping object payload
 const config = { db, menuItemsTable: menuItems, categoriesTable: categories };
 
 export default async function MenuDashboardPage() {
   const dbCategories = await db.select().from(categories).orderBy(categories.order);
   const dbMenuItems = await db.select().from(menuItems).orderBy(desc(menuItems.createdAt));
 
+  const serializedCategories = dbCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    order: c.order,
+  }));
+
+  const serializedItems = dbMenuItems.map((item) => ({
+    id: item.id,
+    categoryId: item.categoryId,
+    name: item.name,
+    description: item.description,
+    price: Number(item.price),
+    costPrice: item.costPrice ? Number(item.costPrice) : 0,
+    isAvailable: item.isAvailable !== false,
+  }));
+
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-10 text-white">
-      {/* 🌟 FIXED: Hand down flat, top-level static functional references to break recursion */}
+    <div className="w-full text-white">
       <MenuClientViewLayout
-        categories={dbCategories}
-        menuItems={dbMenuItems}
+        categories={serializedCategories}
+        menuItems={serializedItems}
         onAddCategory={handleAddCategoryProxy}
         onAddMenuItem={handleAddMenuItemProxy}
         onUpdateMenuItem={handleUpdateMenuItemProxy}
+        onToggleAvailability={handleToggleAvailabilityProxy}
+        onDeleteMenuItem={handleDeleteMenuItemProxy}
       />
     </div>
   );
 }
-
-/**
- * ============================================================================
- * 🌟 FIXED: STANDALONE TOP-LEVEL SERVER ACTIONS (OUTSIDE MAIN COMPONENT STREAM)
- * These compile cleanly into isolated RPC endpoints without stack bloating.
- * ============================================================================
- */
 
 export async function handleAddCategoryProxy(name: string) {
   "use server";
@@ -48,4 +63,14 @@ export async function handleAddMenuItemProxy(formData: FormData) {
 export async function handleUpdateMenuItemProxy(formData: FormData) {
   "use server";
   return updateMenuItemAction(config, formData);
+}
+
+export async function handleToggleAvailabilityProxy(id: number, isAvailable: boolean) {
+  "use server";
+  return toggleItemAvailabilityAction(config, id, isAvailable);
+}
+
+export async function handleDeleteMenuItemProxy(id: number) {
+  "use server";
+  return deleteMenuItemAction(config, id);
 }

@@ -290,7 +290,7 @@ export default function HomeClient({
   const appSuffix = branding?.appNameSuffix || "AMBROSIA";
   const subTagline = branding?.subTagline || "Part of Ethereal Kitchen Cloud";
   const parentCompany = branding?.parentCompany || "A Brand of Ethereal Inn Hospitality LLP";
-  const contactNumber = branding?.whatsAppContactNumber || "919876543210";
+  const contactNumber = branding?.whatsAppContactNumber || "919654686759";
   const fullAddress = branding?.physicalAddress || "Urban Ambrosia Culinary Hub, Ethereal Kitchen Cloud, New Delhi";
   const displayTagline = branding?.tagline || "Gourmet Flavors. Elevated Living.";
   const displayDesc = branding?.descriptionText || "An avant-garde cloud gastronomy experience crafted with farm-to-table provenance, thermal precision, and hospitality lineage.";
